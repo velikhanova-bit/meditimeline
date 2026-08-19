@@ -91,6 +91,59 @@
     return (n / 1024 / 1024).toFixed(1).replace('.', ',') + ' МБ';
   }
 
+  // «Добавить профиль для Ковалёв Пётр Сергеевич» читается как ошибка.
+  // Фамилию сознательно не трогаем: по-русски естественно «для Петра
+  // Сергеевича», а склонение фамилий — отдельная наука с сотней исключений.
+  var GEN_IRREGULAR = {
+    'пётр': 'Петра', 'петр': 'Петра', 'павел': 'Павла',
+    'лев': 'Льва', 'любовь': 'Любови'
+  };
+  var HUSH = /[гкхжчшщ]/;   // после них пишется «и», а не «ы»
+
+  function genGiven(w, female) {
+    if (!w) return '';
+    var low = w.toLowerCase();
+    if (GEN_IRREGULAR[low]) return GEN_IRREGULAR[low];
+    var last = low.slice(-1), prev = low.slice(-2, -1);
+    if (female) {
+      if (low.slice(-2) === 'ия') return w.slice(0, -1) + 'и';
+      if (last === 'а') return w.slice(0, -1) + (HUSH.test(prev) ? 'и' : 'ы');
+      if (last === 'я' || last === 'ь') return w.slice(0, -1) + 'и';
+      return w;                                   // несклоняемое
+    }
+    if (last === 'й' || last === 'ь') return w.slice(0, -1) + 'я';
+    if (last === 'а') return w.slice(0, -1) + (HUSH.test(prev) ? 'и' : 'ы');
+    if (last === 'я') return w.slice(0, -1) + 'и';
+    if (/[бвгджзйклмнпрстфхцчшщ]/.test(last)) return w + 'а';
+    return w;
+  }
+
+  function genPatronymic(w) {
+    if (!w) return '';
+    var low = w.toLowerCase();
+    if (/(ович|евич|ич)$/.test(low)) return w + 'а';
+    if (/(овна|евна|ична)$/.test(low)) return w.slice(0, -1) + 'ы';
+    return w;
+  }
+
+  function sexFromName(full) {
+    var parts = String(full || '').trim().split(/\s+/);
+    var patr = (parts[2] || '').toLowerCase();
+    if (/(овна|евна|ична)$/.test(patr)) return 'female';
+    if (/(ович|евич|ич)$/.test(patr)) return 'male';
+    return 'unknown';
+  }
+
+  function genitivePerson(full, sex) {
+    var parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    var female = sex === 'female' || /(овна|евна|ична)$/i.test(parts[2] || '');
+    // В медицинских бланках порядок «Фамилия Имя Отчество»
+    if (parts.length >= 3) return genGiven(parts[1], female) + ' ' + genPatronymic(parts[2]);
+    if (parts.length === 2) return genGiven(parts[1], female);
+    return genGiven(parts[0], female);
+  }
+
   var toastTimer = null;
   function toast(msg) {
     var t = $('#toast');
@@ -313,6 +366,7 @@
 
   // ─── распознавание ─────────────────────────────────────────────────
   function startRecognition(plan, extractor) {
+    state.busy = true;              // чтение из IndexedDB не должно перебить экран
     go('processing');
     $('#proc-hint').textContent = 'ИИ читает документы. Обычно 5–15 секунд на файл.';
     $('#proc-list').innerHTML = plan.map(function (p, i) {
@@ -396,6 +450,7 @@
     });
 
     chain.then(function () {
+      state.busy = false;
       cta.disabled = false;
       $('#proc-hint').textContent = failed
         ? 'Готово: ' + done + ' из ' + plan.length + '. Файлы со сбоем можно загрузить заново.'
@@ -410,7 +465,8 @@
       }
       if (foreign.length) {
         state.foreign = { patient: foreign[0].patient, docs: foreign };
-        cta.textContent = 'Что с чужими документами';
+        var gen = genitivePerson(foreign[0].patient.name, foreign[0].patient.sex);
+        cta.textContent = gen ? 'Добавить профиль для ' + gen : 'Добавить профиль для этого человека';
         cta.onclick = function () { go('foreign'); };
         return;
       }
@@ -426,15 +482,15 @@
   // ─── вход и пароль ─────────────────────────────────────────────────
   function isEmail(s) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(s).trim()); }
 
-  // Чекбокс «Показать пароль» вместо второго поля «повторите»: пароль
-  // восстановить негде, а опечатку так видно сразу и без лишнего поля.
+  // «Показать пароль» там, где второго поля нет. На регистрации вместо него
+  // поле «Повторить пароль». Проверка на null обязательна: пропавший элемент
+  // иначе роняет весь скрипт, и молча отваливаются все обработчики ниже.
   function bindReveal(box, input) {
-    $(box).addEventListener('change', function () {
-      $(input).type = this.checked ? 'text' : 'password';
-    });
+    var b = $(box), i = $(input);
+    if (!b || !i) return;
+    b.addEventListener('change', function () { i.type = this.checked ? 'text' : 'password'; });
   }
   bindReveal('#li-show', '#li-pass');
-  bindReveal('#su-show', '#su-pass');
   bindReveal('#ap-show', '#ap-pass');
 
   function renderLogin() {
@@ -478,20 +534,44 @@
   // ─── регистрация ───────────────────────────────────────────────────
   function renderSignup() {
     var d = state.signupDraft || { name: '', birthDate: '' };
+    var adding = !!state.paidPending;
+
     $('#su-name').value = d.name || '';
     $('#su-birth').value = toRu(d.birthDate) || '';
     $('#su-name-tag').hidden = !d.name;
     $('#su-birth-tag').hidden = !d.birthDate;
-    // Пароль уже стоит (историю стёрли, а аккаунт остался) — второй раз не спрашиваем.
-    var needPass = Auth.available && !Auth.exists();
+    $('#su-pass2').value = '';
+    $('#su-pass').value = '';
+    $('#su-pass-hint').hidden = true;
+
+    // Пароль уже стоит (аккаунт есть) — второй раз не спрашиваем.
+    var needPass = Auth.available && !Auth.exists() && !adding;
     $('#su-pass').closest('.field').hidden = !needPass;
-    $('#su-show').closest('.check-row').hidden = !needPass;
+    $('#su-pass2').closest('.field').hidden = !needPass;
+    $('#su-email').closest('.field').hidden = !needPass;
     if (!needPass) $('#su-email').value = Auth.email() || '';
+
+    document.querySelector('[data-screen="signup"] h1').textContent = adding ? 'Кого добавляем?' : 'Это вы?';
+    $('#su-save').textContent = adding ? 'Создать профиль' : 'Сохранить историю';
+
+    var banner = $('#signup-found');
+    if (adding) {
+      banner.innerHTML = 'Оплата прошла. Впишите, чей это профиль — дата рождения нужна, чтобы построить шкалу таймлайна.';
+      return;
+    }
     var src = state.signupDocs[0];
-    $('#signup-found').innerHTML = d.name || d.birthDate
+    banner.innerHTML = d.name || d.birthDate
       ? 'ИИ нашёл ваши данные в документе <b>' + esc(src ? src.fileName : '') + '</b>. Проверьте и поправьте, если что-то не так.'
       : 'В документе не нашлись ФИО и дата рождения — впишите их сами. Дата рождения нужна, чтобы построить шкалу.';
   }
+
+  // Несовпадение видно до нажатия «Сохранить», а не после
+  function checkPassMatch() {
+    var a = $('#su-pass').value, b = $('#su-pass2').value;
+    $('#su-pass-hint').hidden = !(b && a !== b);
+  }
+  $('#su-pass').addEventListener('input', checkPassMatch);
+  $('#su-pass2').addEventListener('input', checkPassMatch);
 
   $('#su-save').addEventListener('click', function () {
     var name = $('#su-name').value.trim();
@@ -499,20 +579,26 @@
     var birth = fromRu(birthRu);
     if (birthRu && !birth) return toast('Дата рождения — в виде 24.07.1988');
 
+    var adding = !!state.paidPending;
     var email = $('#su-email').value.trim();
-    var pass = $('#su-pass').value;
-    var needPass = Auth.available && !Auth.exists();
+    var pass = $('#su-pass').value, pass2 = $('#su-pass2').value;
+    var needPass = Auth.available && !Auth.exists() && !adding;
     if (needPass) {
       if (!isEmail(email)) return toast('Впишите почту — по ней вы будете входить');
       if (pass.length < Auth.MIN_LEN) return toast('Пароль — не короче ' + Auth.MIN_LEN + ' символов');
+      if (pass !== pass2) { $('#su-pass-hint').hidden = false; return toast('Пароли не совпадают'); }
     }
+    if (adding && !name) return toast('Впишите, чей это профиль');
 
     var p = {
       id: DB.uid(),
       name: name,
       birth: birth,
-      sex: (state.signupDraft && state.signupDraft.sex) || 'unknown',
-      email: email
+      // Отчество говорит о поле надёжнее, чем ничего: при ручном вводе
+      // ИИ пол не подсказал, а иконку показывать всё равно надо.
+      sex: (state.signupDraft && state.signupDraft.sex !== 'unknown' && state.signupDraft.sex) || sexFromName(name),
+      email: email,
+      paid: adding
     };
     state.profiles.push(p);
     state.currentId = p.id;
@@ -526,7 +612,15 @@
     (needPass ? Auth.create(email, pass) : Promise.resolve())
       .then(function () { return Promise.all(docs.map(function (d) { return DB.put(d); })); })
       .then(function () { docs.forEach(function (d) { state.docs.push(d); }); return saveProfiles(); })
-      .then(function () { btn.disabled = false; go('timeline'); toast('История сохранена'); })
+      .then(function () {
+        btn.disabled = false;
+        var wasAdding = state.paidPending;
+        state.paidPending = false;
+        state.addProfile = false;
+        state.applied.clear(); state.pending.clear();
+        go('timeline');
+        toast(wasAdding ? 'Профиль создан' : 'История сохранена');
+      })
       .catch(function (err) {
         btn.disabled = false;
         console.error(err);
@@ -535,21 +629,42 @@
   });
 
   // ─── чужой документ → питч → оплата ────────────────────────────────
+  // Питч работает в двух режимах: после чужого документа и просто по
+  // кнопке «Добавить профиль» в профиле — там платить предлагают заранее,
+  // а имя человека спросят после оплаты.
   function renderForeign() {
     var f = state.foreign;
-    if (!f) return go('timeline');
+    var back = $('#foreign .topbar .iconbtn') || document.querySelector('[data-screen="foreign"] .iconbtn');
+
+    if (!f) {
+      if (!state.addProfile) return go('timeline');
+      document.querySelector('[data-screen="foreign"] h1').textContent = 'Ещё один профиль';
+      $('#foreign-note').innerHTML = 'Второй профиль — для родственника или ребёнка. ' +
+        'Его документы и показатели не смешаются с вашими: своя история, свой таймлайн, свои графики.';
+      $('#foreign-title').innerHTML = 'Добавьте профиль ещё одного человека';
+      $('#foreign-skip').textContent = 'Не сейчас';
+      if (back) back.dataset.go = 'profile';
+      return;
+    }
+
+    document.querySelector('[data-screen="foreign"] h1').textContent = 'В документе другое имя';
+    if (back) back.dataset.go = 'timeline';
+    $('#foreign-skip').textContent = 'Не сейчас — не загружать эти документы';
+
     var who = f.patient.name || 'другой человек';
     var bd = f.patient.birthDate ? ', ' + toRu(f.patient.birthDate) : '';
     var names = f.docs.map(function (d) { return d.fileName; }).join(', ');
     $('#foreign-note').innerHTML = 'В ' + (f.docs.length > 1 ? 'файлах' : 'файле') + ' <b>' + esc(names) +
       '</b> указан <b>' + esc(who) + esc(bd) + '</b>. Это не ваши анализы — в вашу историю они не попали.';
-    // Имя держим в именительном падеже отдельной строкой: склонять ФИО
-    // кодом — верный способ получить «профиль для Пётр».
-    $('#foreign-title').innerHTML = 'Заведите отдельный профиль<br><span class="who">' + esc(who) + '</span>';
+    var gen = genitivePerson(who, f.patient.sex);
+    $('#foreign-title').innerHTML = gen
+      ? 'Заведите профиль для ' + esc(gen)
+      : 'Заведите отдельный профиль<br><span class="who">' + esc(who) + '</span>';
   }
 
   $('#foreign-skip').addEventListener('click', function () {
-    var n = state.foreign ? state.foreign.docs.length : 0;
+    if (!state.foreign) { state.addProfile = false; return go('profile'); }
+    var n = state.foreign.docs.length;
     state.foreign = null;
     go('timeline');
     toast(n + ' ' + plain(n) + ' не загружено');
@@ -557,17 +672,25 @@
 
   function renderPayment() {
     var f = state.foreign;
-    if (!f) return go('timeline');
+    if (!f && !state.addProfile) return go('timeline');
     $('#pay-summary').innerHTML =
-      '<div class="kv"><dt>Профиль</dt><dd>' + esc(f.patient.name || 'Новый профиль') + '</dd></div>' +
-      '<div class="kv"><dt>Документов</dt><dd>' + f.docs.length + '</dd></div>' +
+      '<div class="kv"><dt>Профиль</dt><dd>' + esc(f ? (f.patient.name || 'Новый профиль') : 'Новый профиль') + '</dd></div>' +
+      (f ? '<div class="kv"><dt>Документов</dt><dd>' + f.docs.length + '</dd></div>' : '') +
       '<div class="kv"><dt>К оплате</dt><dd>' + PRICE + ' ₽</dd></div>';
   }
 
   $('#pay-go').addEventListener('click', function () {
     var f = state.foreign;
-    if (!f) return go('timeline');
+    if (!f && !state.addProfile) return go('timeline');
     if ($('#pay-num').value.replace(/\D/g, '').length < 12) return toast('Введите номер карты');
+
+    // Профиль без документов: имя спрашиваем сразу после оплаты
+    if (!f) {
+      state.paidPending = true;
+      state.signupDraft = null;
+      state.signupDocs = [];
+      return go('signup');
+    }
 
     var p = {
       id: DB.uid(),
@@ -1173,7 +1296,9 @@
       '<div class="profile-hero"><span class="ava-lg">' + icon + '</span>' +
         '<div style="text-align:center">' +
           '<h2 style="font-size:var(--text-lg)">' + esc((p && p.name) || 'Имя не найдено') + '</h2>' +
-          '<p class="muted">Профиль заполнен из ваших документов</p>' +
+          '<p class="muted">' + (myDocs().length
+            ? 'Профиль заполнен из ваших документов'
+            : 'Документов пока нет — загрузите первые') + '</p>' +
         '</div></div>' +
       '<div class="card"><dl style="margin:0">' +
         '<div class="kv"><dt>Дата рождения</dt><dd>' + (p && p.birth ? ruDate(p.birth) : '—') + '</dd></div>' +
@@ -1182,15 +1307,111 @@
         '<div class="kv"><dt>Показателей</dt><dd>' + indCount + '</dd></div>' +
         '<div class="kv"><dt>История с</dt><dd>' + (ds.length ? ruDate(ds[ds.length - 1].date) : '—') + '</dd></div>' +
       '</dl></div>' +
-      (state.profiles.length > 1
-        ? '<div class="stack-sm"><div class="section-label">Профили в аккаунте</div>' +
-          state.profiles.map(profileRow).join('') + '</div>'
-        : '') +
+      '<div class="stack-sm">' +
+        '<div class="section-label">Профили в аккаунте</div>' +
+        state.profiles.map(profileRow).join('') +
+        '<button class="btn btn-ghost" type="button" id="pr-add">Добавить профиль</button>' +
+        '<p class="muted" style="font-size:11px">Отдельная история для родственника или ребёнка — ' + PRICE + ' ₽ разово.</p>' +
+      '</div>' +
       '<div class="card stack-sm"><div class="section-label">Группы показателей</div>' +
         (allSystems().length
           ? '<div style="display:flex;flex-wrap:wrap;gap:6px">' + allSystems().map(function (s) { return badge(s.name); }).join('') + '</div>'
           : '<p class="muted">Пока пусто</p>') +
-      '</div>';
+      '</div>' +
+      accountCard();
+  }
+
+  // Пароль ставится при регистрации; пока его нет, менять нечего.
+  function accountCard() {
+    if (!Auth.available || !Auth.exists()) return '';
+    return '<div class="card stack-sm" id="account-card">' +
+      '<div class="section-label">Аккаунт</div>' +
+      '<p class="muted" style="font-size:var(--text-sm)">Вход по почте <b>' + esc(Auth.email()) + '</b></p>' +
+      '<div id="acc-zone"></div>' +
+      '<button class="btn btn-ghost" type="button" id="pr-pass">Изменить пароль</button>' +
+      '<button class="btn btn-ghost is-danger" type="button" id="pr-wipe">Удалить аккаунт</button>' +
+    '</div>';
+  }
+
+  function passForm() {
+    return '<div class="card stack" style="background:var(--muted)">' +
+      '<label class="field"><span class="label">Текущий пароль</span>' +
+        '<input type="password" id="cp-old" autocomplete="current-password"></label>' +
+      '<label class="field"><span class="label">Новый пароль — не короче ' + Auth.MIN_LEN + ' символов</span>' +
+        '<input type="password" id="cp-new" autocomplete="new-password"></label>' +
+      '<label class="field"><span class="label">Повторить новый пароль</span>' +
+        '<input type="password" id="cp-new2" autocomplete="new-password"></label>' +
+      '<div class="row" style="display:flex;gap:var(--space-2)">' +
+        '<button class="btn" type="button" id="cp-save">Сохранить пароль</button>' +
+        '<button class="btn btn-ghost" type="button" id="cp-cancel">Отмена</button>' +
+      '</div></div>';
+  }
+
+  function wipeForm() {
+    return '<div class="confirm">' +
+      '<p>Удалить аккаунт целиком? Исчезнут все документы (' + state.docs.length + '), ' +
+      'все профили (' + state.profiles.length + ') и пароль. Восстановить будет нечем.</p>' +
+      '<div class="row">' +
+        '<button class="btn btn-danger" type="button" id="wp-yes">Удалить всё</button>' +
+        '<button class="btn btn-ghost" type="button" id="wp-no">Отмена</button>' +
+      '</div></div>';
+  }
+
+  $('#profile-body').addEventListener('click', function (e) {
+    var t = e.target;
+
+    if (t.closest('#pr-add')) {
+      state.foreign = null;
+      state.addProfile = true;
+      return go('foreign');
+    }
+
+    if (t.closest('#pr-pass')) { $('#acc-zone').innerHTML = passForm(); return; }
+    if (t.closest('#cp-cancel')) { $('#acc-zone').innerHTML = ''; return; }
+    if (t.closest('#pr-wipe')) { $('#acc-zone').innerHTML = wipeForm(); return; }
+    if (t.closest('#wp-no')) { $('#acc-zone').innerHTML = ''; return; }
+
+    if (t.closest('#cp-save')) return changePassword();
+    if (t.closest('#wp-yes')) return wipeAccount();
+  });
+
+  function changePassword() {
+    var oldp = $('#cp-old').value;
+    var np = $('#cp-new').value, np2 = $('#cp-new2').value;
+    if (np.length < Auth.MIN_LEN) return toast('Новый пароль — не короче ' + Auth.MIN_LEN + ' символов');
+    if (np !== np2) return toast('Новые пароли не совпадают');
+
+    var btn = $('#cp-save');
+    btn.disabled = true;
+    Auth.verify(Auth.email(), oldp).then(function (ok) {
+      if (!ok) { btn.disabled = false; return toast('Текущий пароль не подошёл'); }
+      return Auth.create(Auth.email(), np).then(function () {
+        $('#acc-zone').innerHTML = '';
+        toast('Пароль изменён');
+      });
+    }).catch(function (err) {
+      btn.disabled = false;
+      console.error(err);
+      toast('Не удалось изменить пароль');
+    });
+  }
+
+  function wipeAccount() {
+    DB.clear()
+      .then(function () {
+        return Promise.all([
+          DB.setMeta('profiles', []), DB.setMeta('currentId', null), Auth.clear()
+        ]);
+      })
+      .then(function () {
+        state.docs = []; state.profiles = []; state.currentId = null;
+        state.applied.clear(); state.pending.clear();
+        state.signupDocs = []; state.signupDraft = null; state.foreign = null;
+        renderUpload(); renderProfileBtn();
+        go('upload');
+        toast('Аккаунт удалён');
+      })
+      .catch(function (err) { console.error(err); toast('Не удалось удалить аккаунт'); });
   }
 
   document.addEventListener('click', function (e) {
@@ -1321,6 +1542,9 @@
     renderUpload();
     renderProfileBtn();
     if (Auth.exists() && !Auth.unlocked()) return go('login');
+    // Чтение из IndexedDB асинхронное: если человек успел выбрать файлы
+    // раньше, чем оно закончилось, нельзя выбрасывать его с экрана разбора.
+    if (state.busy) return;
     go(myDocs().length ? 'timeline' : 'upload');
   }
 
@@ -1351,6 +1575,22 @@
       toast('Не удалось открыть хранилище браузера');
       renderUpload();
     });
+
+  // Марка в левом верхнем углу каждого экрана. Вставляем скриптом:
+  // руками это дюжина одинаковых правок, которые разъедутся при первой же
+  // новой секции.
+  document.querySelectorAll('.topbar').forEach(function (bar) {
+    var h1 = bar.querySelector('h1');
+    if (!h1 || bar.querySelector('.brand')) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'tb-title';
+    bar.insertBefore(wrap, h1);
+    var b = document.createElement('span');
+    b.className = 'brand';
+    b.textContent = 'MedTimeline';
+    wrap.appendChild(b);
+    wrap.appendChild(h1);
+  });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

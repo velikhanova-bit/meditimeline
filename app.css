@@ -24,6 +24,18 @@ body { display: flex; justify-content: center; }
 .topbar h1 { font-size: var(--text-lg); flex: 1; padding-top: var(--space-2); }
 .topbar h1.solo { padding-top: 0; }
 
+/* Марка в левом верхнем углу каждого экрана. Обёртка вставляется
+   скриптом, чтобы не править дюжину шапок вручную. */
+.tb-title { flex: 1; min-width: 0; }
+.tb-title h1 { flex: none; padding-top: 0; }
+.brand {
+  display: block; margin-bottom: 2px;
+  font-family: var(--font-body);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--muted-fg); line-height: 1;
+}
+
 .iconbtn {
   display: inline-flex; align-items: center; justify-content: center;
   width: var(--tap); height: var(--tap);
@@ -369,17 +381,26 @@ body { display: flex; justify-content: center; }
 .found-banner .bi svg { width: 22px; height: 22px; }
 .found-banner p { font-size: var(--text-sm); }
 
-.prefilled { position: relative; }
-.prefilled > input { padding-right: 96px !important; }
+/* Плашка стоит в строке заголовка поля, а не поверх ввода: внутри поля
+   она перекрывала длинное ФИО и мешала его править. */
+.prefilled > .label {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-2);
+}
 .prefilled .tag {
-  position: absolute; right: var(--space-3); bottom: 11px;
+  flex: none;
   font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
   color: var(--ok);
   background: color-mix(in srgb, var(--ok) 14%, transparent);
   padding: 3px 8px; border-radius: var(--radius-full);
-  pointer-events: none;
 }
 .prefilled .tag[hidden] { display: none; }
+
+.field-hint {
+  display: block; margin-top: var(--space-2);
+  font-size: var(--text-xs); font-weight: 600; color: var(--danger);
+}
+.field-hint[hidden] { display: none; }
 
 /* ─── группы документов ────────────────────────────────────────────── */
 .chip-row { display: flex; flex-wrap: wrap; gap: var(--space-2); }
