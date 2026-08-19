@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash bin/ship:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh api repos/*/pages)",
+      "Bash(curl -sSI:*)",
+      "Bash(curl -s:*)",
+      "Bash(npx wrangler deploy:*)",
+      "Bash(npx wrangler tail:*)",
+      "Bash(npx wrangler secret list:*)",
+      "Bash(npm install)",
+      "Bash(python3 -m http.server:*)",
+      "Bash(python3 .claude/skills/ios-testflight/templates/generate_icon.py:*)",
+      "Bash(xcodegen:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun simctl:*)",
+      "Bash(xcrun altool:*)",
+      "Bash(asc apps:*)",
+      "Bash(asc builds:*)",
+      "Bash(asc testflight:*)",
+      "Bash(asc doctor:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(open:*)",
+      "Read(//Users/**)",
+      "Edit(//Users/**)",
+      "Write(//Users/**)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Bash(git push --force:*)",
+      "Bash(rm -rf:*)"
+    ]
+  }
+}
