@@ -11,7 +11,7 @@ const CACHE = 'medtimeline-v2';
 const SHELL = [
   './', './index.html',
   './app.js', './db.js', './auth.js', './extract.js',
-  './theme.css', './app.css',
+  './theme.css', './app.css', './runner.js',
   './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png'
 ];
