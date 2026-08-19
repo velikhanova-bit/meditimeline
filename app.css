@@ -508,12 +508,28 @@ body.select-mode .assign-bar { display: flex; }
 .success-hero .ring svg { width: 36px; height: 36px; }
 
 .profile-row {
-  display: flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-3); border: 1px solid var(--border);
+  display: flex; align-items: center;
+  border: 1px solid var(--border);
   border-radius: var(--radius); background: var(--card);
-  width: 100%; text-align: left; font-family: var(--font-body); cursor: pointer;
+  width: 100%; overflow: hidden;
+}
+.profile-pick {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3);
+  background: none; border: none; text-align: left;
+  font-family: var(--font-body); cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
+.profile-del {
+  flex: none; width: var(--tap); height: var(--tap);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-left: 1px solid var(--border);
+  color: var(--muted-fg); cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.profile-del:hover { color: var(--danger); }
+.profile-del svg { width: 18px; height: 18px; }
 .profile-row.is-current { border-color: var(--primary); }
 .profile-row .ava-sm {
   flex: none; width: 40px; height: 40px; border-radius: var(--radius-full);
@@ -568,40 +584,3 @@ body.select-mode .assign-bar { display: flex; }
 }
 .toast.is-open { opacity: 1; transform: translate(-50%, 0); }
 
-/* ─── бегунок на таймлайне ─────────────────────────────────────────────
-   Украшение. Чтобы убрать: удалить этот блок, строку <script src="./runner.js">
-   в index.html и сам runner.js. На продуктовую логику ничто не завязано. */
-.tl-runner {
-  position: absolute; left: var(--space-4); top: 0;
-  width: 22px; height: 26px;
-  color: var(--primary);
-  opacity: 0; pointer-events: none;
-  transition: opacity var(--dur) var(--ease);
-  will-change: transform;
-  z-index: 2;
-}
-.tl-runner svg { width: 100%; height: 100%; display: block; }
-
-/* Вверх — разворачиваем фигурку, чтобы читалось направление движения */
-.tl-runner.is-up { transform-origin: center; }
-.tl-runner.is-up svg { transform: scaleY(-1); }
-
-/* Шаг: руки и ноги ходят навстречу друг другу. Длительность приходит
-   из --step, её выставляет runner.js по скорости прокрутки. */
-.tl-runner .leg-a, .tl-runner .arm-b { transform-origin: 14px 19px; }
-.tl-runner .leg-b, .tl-runner .arm-a { transform-origin: 14px 19px; }
-
-.tl-runner.is-running .leg-a,
-.tl-runner.is-running .arm-b { animation: mt-step var(--step, 300ms) linear infinite; }
-.tl-runner.is-running .leg-b,
-.tl-runner.is-running .arm-a { animation: mt-step var(--step, 300ms) linear infinite reverse; }
-
-@keyframes mt-step {
-  0%   { transform: rotate(16deg); }
-  50%  { transform: rotate(-16deg); }
-  100% { transform: rotate(16deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tl-runner { display: none; }
-}

@@ -413,6 +413,32 @@
     return chain.then(function () { return plan; });
   }
 
+  // Сколько измерений у каждого показателя сейчас. Ключ — каноничное
+  // имя первого встреченного написания, чтобы «ТТГ» и «ТТГ (тиреотропный
+  // гормон)» считались одним рядом.
+  function seriesSnapshot() {
+    var out = {};
+    myDocs().forEach(function (d) {
+      if (!isDate(d.date)) return;
+      (d.indicators || []).forEach(function (i) {
+        if (numOf(i.value) === null) return;
+        var key = Object.keys(out).filter(function (k) { return sameSeries(k, i.name); })[0] || i.name;
+        out[key] = (out[key] || 0) + 1;
+      });
+    });
+    return out;
+  }
+
+  // Показатели, у которых динамика появилась или пополнилась новыми точками
+  function newlyCharted(before) {
+    var after = seriesSnapshot();
+    return Object.keys(after).filter(function (name) {
+      if (after[name] < 2) return false;
+      var was = Object.keys(before).filter(function (k) { return sameSeries(k, name); })[0];
+      return !was || before[was] < after[name];
+    }).map(function (name) { return { name: name, count: after[name] }; });
+  }
+
   // ─── распознавание ─────────────────────────────────────────────────
   function startRecognition(plan, extractor) {
     state.busy = true;              // чтение из IndexedDB не должно перебить экран
@@ -431,6 +457,10 @@
 
     var done = 0, failed = 0, foreign = [], firstPatient = null;
     state.signupDocs = [];
+    // Снимок серий ДО загрузки: после неё сравним и скажем, у каких
+    // показателей появилась динамика. Иначе человек не узнает, что новый
+    // документ состыковался со старыми, — кнопка просто тихо появится.
+    var seriesBefore = seriesSnapshot();
 
     // Последовательно, а не пачкой: не упираемся в лимит запросов
     // и видно, на каком файле всё встало.
@@ -520,9 +550,31 @@
         return;
       }
       cta.onclick = function () { go('timeline'); };
+      showNewCharts(seriesBefore);
     });
   }
   function plain(n) { return plural(n, 'документ', 'документа', 'документов'); }
+
+  function showNewCharts(before) {
+    var zone = $('#proc-new');
+    var fresh = newlyCharted(before);
+    zone.hidden = !fresh.length;
+    if (!fresh.length) return;
+    zone.innerHTML = '<div class="section-label">Обновилась динамика</div>' +
+      '<p class="muted" style="font-size:var(--text-sm)">Новые документы состыковались со старыми — ' +
+      'у этих показателей график пересчитан:</p>' +
+      '<div class="chip-row">' + fresh.map(function (s) {
+        return '<button class="chip" type="button" data-newchart="' + esc(s.name) + '">' +
+          esc(s.name) + ' <span class="count">' + s.count + '</span></button>';
+      }).join('') + '</div>';
+  }
+
+  $('#proc-new').addEventListener('click', function (e) {
+    var chip = e.target.closest('[data-newchart]');
+    if (!chip) return;
+    state.dynFrom = null;              // пришли не из слоя даты, а со сводки
+    showDynamics(chip.dataset.newchart);
+  });
 
   $('#proc-cta').addEventListener('click', function () {
     if (!this.onclick) go('timeline');
@@ -1372,16 +1424,26 @@
   }
 
   // ─── профиль ───────────────────────────────────────────────────────
-  function profileRow(p) {
+  function profileRow(p, deletable) {
     var icon = p.sex === 'male' ? I.man : (p.sex === 'female' ? I.woman : I.person);
     var n = state.docs.filter(function (d) { return d.profileId === p.id; }).length;
-    return '<button class="profile-row' + (p.id === state.currentId ? ' is-current' : '') +
-      '" type="button" data-profile="' + p.id + '">' +
-      '<span class="ava-sm">' + icon + '</span>' +
-      '<span class="pmeta"><strong>' + esc(p.name || 'Без имени') + '</strong>' +
-        '<span>' + (p.birth ? toRu(p.birth) + ' · ' : '') + n + ' ' + plain(n) + '</span></span>' +
-      (p.id === state.currentId ? '<span class="badge">текущий</span>' : '') +
-    '</button>';
+    // Кнопка внутри кнопки — невалидная разметка, поэтому строка это
+    // контейнер с двумя отдельными кнопками: выбрать и удалить.
+    return '<div class="profile-row' + (p.id === state.currentId ? ' is-current' : '') + '">' +
+      '<button class="profile-pick" type="button" data-profile="' + p.id + '">' +
+        '<span class="ava-sm">' + icon + '</span>' +
+        '<span class="pmeta"><strong>' + esc(p.name || 'Без имени') + '</strong>' +
+          '<span>' + (p.birth ? toRu(p.birth) + ' · ' : '') + n + ' ' + plain(n) + '</span></span>' +
+        (p.id === state.currentId ? '<span class="badge">текущий</span>' : '') +
+      '</button>' +
+      (deletable && state.profiles.length > 1
+        ? '<button class="profile-del" type="button" data-delprofile="' + p.id + '" ' +
+          'aria-label="Удалить профиль ' + esc(p.name || '') + '">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" stroke-linecap="round" stroke-linejoin="round"/>' +
+          '</svg></button>'
+        : '') +
+    '</div>';
   }
 
   function renderProfile() {
@@ -1409,7 +1471,7 @@
       '<button class="btn btn-ghost" type="button" id="pr-editme">Изменить мои данные</button>' +
       '<div class="stack-sm">' +
         '<div class="section-label">Профили в аккаунте</div>' +
-        state.profiles.map(profileRow).join('') +
+        state.profiles.map(function (x) { return profileRow(x, true); }).join('') +
         '<button class="btn btn-ghost" type="button" id="pr-add">Добавить профиль</button>' +
         '<p class="muted" style="font-size:11px">Отдельная история для родственника или ребёнка — ' + PRICE + ' ₽ разово.</p>' +
       '</div>' +
@@ -1503,6 +1565,45 @@
       '</div></div>';
   }
 
+  function askDeleteProfile(id) {
+    if (state.profiles.length < 2) {
+      return toast('Это единственный профиль — его убирает «Удалить аккаунт»');
+    }
+    var p = state.profiles.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    var docs = state.docs.filter(function (d) { return d.profileId === id; });
+    var inds = docs.reduce(function (n, d) { return n + (d.indicators || []).length; }, 0);
+
+    $('#pr-edit-zone').innerHTML = '<div class="confirm">' +
+      '<p>Удалить профиль «' + esc(p.name || 'Без имени') + '»? Вместе с ним исчезнут ' +
+      docs.length + ' ' + plain(docs.length) + ' и ' + inds + ' ' +
+      plural(inds, 'показатель', 'показателя', 'показателей') +
+      '. Остальные профили не тронем. Отменить будет нельзя.</p>' +
+      '<div class="row">' +
+        '<button class="btn btn-danger" type="button" data-dp-yes="' + id + '">Удалить профиль</button>' +
+        '<button class="btn btn-ghost" type="button" id="dp-no">Оставить</button>' +
+      '</div></div>';
+  }
+
+  function deleteProfile(id) {
+    var docs = state.docs.filter(function (d) { return d.profileId === id; });
+    Promise.all(docs.map(function (d) { return DB.remove(d.id); }))
+      .then(function () {
+        state.docs = state.docs.filter(function (d) { return d.profileId !== id; });
+        state.profiles = state.profiles.filter(function (p) { return p.id !== id; });
+        // Удалили тот, что был открыт — переключаемся на первый оставшийся
+        if (state.currentId === id) state.currentId = state.profiles[0].id;
+        state.applied.clear(); state.pending.clear();
+        return saveProfiles();
+      })
+      .then(function () {
+        $('#pr-edit-zone').innerHTML = '';
+        renderProfile(); renderProfileBtn(); renderFilterUI(); renderTimeline();
+        toast('Профиль удалён');
+      })
+      .catch(function (err) { console.error(err); toast('Не удалось удалить профиль'); });
+  }
+
   function wipeForm() {
     return '<div class="confirm">' +
       '<p>Удалить аккаунт целиком? Исчезнут все документы (' + state.docs.length + '), ' +
@@ -1525,6 +1626,12 @@
     if (t.closest('#pr-editme')) { $('#pr-edit-zone').innerHTML = meForm(); return; }
     if (t.closest('#me-cancel')) { $('#pr-edit-zone').innerHTML = ''; return; }
     if (t.closest('#me-save')) return saveMe();
+
+    var del = t.closest('[data-delprofile]');
+    if (del) return askDeleteProfile(del.dataset.delprofile);
+    if (t.closest('#dp-no')) { $('#pr-edit-zone').innerHTML = ''; return; }
+    var yes = t.closest('[data-dp-yes]');
+    if (yes) return deleteProfile(yes.dataset.dpYes);
 
     if (t.closest('#pr-pass')) { $('#acc-zone').innerHTML = passForm(); return; }
     if (t.closest('#cp-cancel')) { $('#acc-zone').innerHTML = ''; return; }
