@@ -238,14 +238,14 @@ body { display: flex; justify-content: center; }
 }
 .gap-label { margin-left: 52px; font-size: 11px; color: var(--muted-fg); background: var(--bg); padding: 2px 0; }
 .gap.is-cut::before { background: repeating-linear-gradient(to bottom, var(--border) 0 3px, transparent 3px 9px); }
-/* Отступ тот же, что у обычной подписи промежутка: раньше бейдж
-   намеренно наезжал на линию, чтобы «разорвать» её, но читалось это
-   как съехавшая вёрстка. Линия рвётся пунктиром, подписи стоят в столбик. */
+/* Ровно то же место, что у обычной подписи промежутка. Раньше здесь была
+   пилюля с рамкой: она наезжала на линию, а после сдвига вправо её текст
+   из-за padding начинался на 11 px правее соседей — колонка разъезжалась.
+   Линию и так рвёт пунктир, рамка ничего не добавляла. */
 .cut-badge {
-  margin-left: 52px; padding: 3px 10px;
-  background: var(--bg); border: 1px dashed var(--border);
-  border-radius: var(--radius-full);
-  font-size: 10px; font-weight: 600; color: var(--muted-fg);
+  margin-left: 52px;
+  font-size: 11px; font-weight: 700; color: var(--muted-fg);
+  background: var(--bg); padding: 2px 0;
 }
 
 .tl-empty { text-align: center; padding: var(--space-6) var(--space-4); color: var(--muted-fg); font-size: var(--text-sm); }
