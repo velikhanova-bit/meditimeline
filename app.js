@@ -264,6 +264,46 @@
   });
   $('#settings-back').addEventListener('click', function () { go(state.backTo); });
 
+  // «Назад» с динамики возвращает в тот же слой даты, откуда её открыли,
+  // а не просто на таймлайн: человек смотрел показатели конкретного дня.
+  $('#dyn-back').addEventListener('click', function () {
+    var from = state.dynFrom;
+    go('timeline');
+    if (from && state.docs.some(function (d) { return d.id === from; })) openSheet(from);
+    state.dynFrom = null;
+  });
+
+  // ─── маски ввода ───────────────────────────────────────────────────
+  function maskDate(v) {
+    var d = v.replace(/\D/g, '').slice(0, 8);
+    var out = d.slice(0, 2);
+    if (d.length > 2) out += '.' + d.slice(2, 4);
+    if (d.length > 4) out += '.' + d.slice(4, 8);
+    return out;
+  }
+  function maskExp(v) {
+    var d = v.replace(/\D/g, '').slice(0, 4);
+    var out = d.slice(0, 2);
+    if (d.length > 2) out += '/' + d.slice(2, 4);
+    return out;
+  }
+  var MASKS = { date: maskDate, exp: maskExp };
+
+  // Делегируем на документ: поля появляются и в разметке, и в формах,
+  // которые рисуются на лету (правка своих данных).
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el.dataset || !MASKS[el.dataset.mask]) return;
+    // При стирании не вмешиваемся: иначе backspace упирается в разделитель,
+    // который мы тут же дорисовываем обратно.
+    if (e.inputType && e.inputType.indexOf('delete') === 0) return;
+    var atEnd = el.selectionStart === el.value.length;
+    var v = MASKS[el.dataset.mask](el.value);
+    if (v === el.value) return;
+    el.value = v;
+    if (atEnd) try { el.setSelectionRange(v.length, v.length); } catch (err) { /* не текстовое поле */ }
+  });
+
   // ─── экран загрузки ────────────────────────────────────────────────
   function apiKey() { try { return localStorage.getItem(KEY_STORE) || ''; } catch (e) { return ''; } }
   function model() {
@@ -1186,7 +1226,11 @@
     var save = t.closest('[data-save]');
     if (save) return saveIndicator(save.dataset.save);
     var hist = t.closest('[data-hist]');
-    if (hist) { closeSheet(); return showDynamics(hist.dataset.hist); }
+    if (hist) {
+      state.dynFrom = openDocId;      // запоминаем слой до его закрытия
+      closeSheet();
+      return showDynamics(hist.dataset.hist);
+    }
     if (t.closest('[data-open-file]')) return openFile();
     if (t.closest('[data-ask-del]')) return askDelete();
     if (t.closest('[data-del-yes]')) return doDelete();
@@ -1396,7 +1440,7 @@
       '<label class="field"><span class="label">Фамилия, имя, отчество</span>' +
         '<input type="text" id="me-name" value="' + esc(p.name || '') + '" autocomplete="name"></label>' +
       '<label class="field"><span class="label">Дата рождения</span>' +
-        '<input type="text" id="me-birth" value="' + esc(toRu(p.birth) || '') + '" placeholder="ДД.ММ.ГГГГ" inputmode="numeric"></label>' +
+        '<input type="text" id="me-birth" value="' + esc(toRu(p.birth) || '') + '" placeholder="ДД.ММ.ГГГГ" inputmode="numeric" data-mask="date" maxlength="10"></label>' +
       '<label class="field"><span class="label">Пол</span>' +
         '<select id="me-sex">' +
           '<option value="unknown"' + (p.sex === 'female' || p.sex === 'male' ? '' : ' selected') + '>не указан</option>' +

@@ -29,11 +29,11 @@ body { display: flex; justify-content: center; }
 .tb-title { flex: 1; min-width: 0; }
 .tb-title h1 { flex: none; padding-top: 0; }
 .brand {
-  display: block; margin-bottom: 2px;
-  font-family: var(--font-body);
-  font-size: 10px; font-weight: 700;
-  letter-spacing: 0.09em; text-transform: uppercase;
-  color: var(--muted-fg); line-height: 1;
+  display: block; margin-bottom: 3px;
+  font-family: var(--font-heading);   /* тот же Lora, что у заголовков экранов */
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted-fg); line-height: 1.1;
 }
 
 .iconbtn {
@@ -567,3 +567,41 @@ body.select-mode .assign-bar { display: flex; }
   z-index: 30;
 }
 .toast.is-open { opacity: 1; transform: translate(-50%, 0); }
+
+/* ─── бегунок на таймлайне ─────────────────────────────────────────────
+   Украшение. Чтобы убрать: удалить этот блок, строку <script src="./runner.js">
+   в index.html и сам runner.js. На продуктовую логику ничто не завязано. */
+.tl-runner {
+  position: absolute; left: var(--space-4); top: 0;
+  width: 22px; height: 26px;
+  color: var(--primary);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur) var(--ease);
+  will-change: transform;
+  z-index: 2;
+}
+.tl-runner svg { width: 100%; height: 100%; display: block; }
+
+/* Вверх — разворачиваем фигурку, чтобы читалось направление движения */
+.tl-runner.is-up { transform-origin: center; }
+.tl-runner.is-up svg { transform: scaleY(-1); }
+
+/* Шаг: руки и ноги ходят навстречу друг другу. Длительность приходит
+   из --step, её выставляет runner.js по скорости прокрутки. */
+.tl-runner .leg-a, .tl-runner .arm-b { transform-origin: 14px 19px; }
+.tl-runner .leg-b, .tl-runner .arm-a { transform-origin: 14px 19px; }
+
+.tl-runner.is-running .leg-a,
+.tl-runner.is-running .arm-b { animation: mt-step var(--step, 300ms) linear infinite; }
+.tl-runner.is-running .leg-b,
+.tl-runner.is-running .arm-a { animation: mt-step var(--step, 300ms) linear infinite reverse; }
+
+@keyframes mt-step {
+  0%   { transform: rotate(16deg); }
+  50%  { transform: rotate(-16deg); }
+  100% { transform: rotate(16deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-runner { display: none; }
+}

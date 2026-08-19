@@ -148,7 +148,7 @@
         </label>
         <label class="field prefilled">
           <span class="label">Дата рождения<span class="tag" id="su-birth-tag">ИЗ ДОКУМЕНТА</span></span>
-          <input type="text" id="su-birth" placeholder="ДД.ММ.ГГГГ" inputmode="numeric">
+          <input type="text" id="su-birth" placeholder="ДД.ММ.ГГГГ" inputmode="numeric" data-mask="date" maxlength="10">
         </label>
         <label class="field">
           <span class="label">Почта — по ней вы будете входить</span>
@@ -254,7 +254,7 @@
           </label>
           <label class="field">
             <span class="label">Срок</span>
-            <input type="text" id="pay-exp" placeholder="ММ / ГГ" inputmode="numeric" autocomplete="cc-exp">
+            <input type="text" id="pay-exp" placeholder="ММ/ГГ" inputmode="numeric" autocomplete="cc-exp" data-mask="exp" maxlength="5">
           </label>
           <label class="field">
             <span class="label">CVC</span>
@@ -290,7 +290,7 @@
   <!-- ═══ ДИНАМИКА ═════════════════════════════════════════════════ -->
   <section class="screen" data-screen="dynamics">
     <div class="topbar">
-      <button class="iconbtn" data-go="timeline" aria-label="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="iconbtn" id="dyn-back" aria-label="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <h1 id="dyn-title">Динамика</h1>
     </div>
     <div class="screen-body stack-lg" id="dyn-body"></div>
@@ -403,5 +403,6 @@
 <script src="./auth.js"></script>
 <script src="./extract.js"></script>
 <script src="./app.js"></script>
+<script src="./runner.js"></script>
 </body>
 </html>
