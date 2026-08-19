@@ -1,19 +1,18 @@
 /**
- * Фигурка на верёвке таймлайна.
+ * Человечек на канате слева от таймлайна.
  *
- * Вниз — спускается дюльфером: висит на прямых руках, ноги упираются
- * в стену, корпус слегка отклонён. Вверх — карабкается: руки и ноги
- * перехватывают по очереди.
+ * Вниз — перебирает руками по канату, ноги обхватывают его и придерживают.
+ * Вверх — лезет: рука и противоположная нога подтягиваются по очереди.
  *
  * Украшение. Держится в отдельном файле намеренно: чтобы убрать, достаточно
- * снять одну строку <script> в index.html и блок «верхолаз» в app.css —
+ * снять одну строку <script> в index.html и блок «канат» в app.css —
  * ни одна строка продуктовой логики на этот код не завязана.
  */
 (function (global) {
   'use strict';
 
-  var STEP_FAST = 190;   // мс на перехват при быстрой прокрутке
-  var STEP_SLOW = 620;   // мс на перехват при медленной
+  var STEP_FAST = 200;   // мс на перехват при быстрой прокрутке
+  var STEP_SLOW = 640;   // мс на перехват при медленной
   var IDLE_AFTER = 170;  // через столько тишины считаем, что человек замер
 
   function init() {
@@ -25,21 +24,28 @@
     // Уважаем системную настройку: кому анимации мешают, тому их не показываем.
     if (global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
+    var rope = document.createElement('div');
+    rope.id = 'tl-rope';
+    rope.className = 'tl-rope';
+    rope.setAttribute('aria-hidden', 'true');
+    frame.appendChild(rope);
+
     var el = document.createElement('div');
     el.id = 'tl-runner';
     el.className = 'tl-runner is-down';
     el.setAttribute('aria-hidden', 'true');   // декорация, скринридеру не нужна
-    // Верёвка — сама линия таймлайна, она проходит по x=14 внутри вьюбокса.
+    // Канат проходит по x=11 внутри вьюбокса: туда тянутся руки,
+    // вокруг него смыкаются ноги.
     el.innerHTML =
-      '<svg viewBox="0 0 28 38" fill="none" stroke="currentColor" ' +
-           'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+      '<svg viewBox="0 0 30 40" fill="none" stroke="currentColor" ' +
+           'stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">' +
         '<g class="figure">' +
-          '<circle class="head" cx="14" cy="6" r="3.6" fill="currentColor" stroke="none"/>' +
-          '<path class="torso" d="M14 10v11"/>' +
-          '<path class="arm-a" d="M14 13 9 6"/>' +
-          '<path class="arm-b" d="M14 13 19 8"/>' +
-          '<path class="leg-a" d="M14 21 8 28"/>' +
-          '<path class="leg-b" d="M14 21 19 29"/>' +
+          '<circle class="head" cx="18" cy="11" r="3.5" fill="currentColor" stroke="none"/>' +
+          '<path class="torso" d="M17.5 14.5V25"/>' +
+          '<path class="arm-a" d="M17 16.5C14 15.5 12 13.5 11 11"/>' +
+          '<path class="arm-b" d="M17 18.5C14.5 18.5 12.5 17.5 11 16"/>' +
+          '<path class="leg-a" d="M17.5 25C14 26 11.5 27.5 11 29.5"/>' +
+          '<path class="leg-b" d="M17.5 25C15 28 12.5 30 11 31"/>' +
         '</g>' +
       '</svg>';
     frame.appendChild(el);
@@ -51,11 +57,16 @@
 
     function place() {
       pending = false;
-      var max = scroll.scrollHeight - scroll.clientHeight;
       var top = scroll.offsetTop;
+      // канат натянут ровно вдоль видимой части ленты
+      rope.style.top = top + 'px';
+      rope.style.height = scroll.clientHeight + 'px';
+
+      var max = scroll.scrollHeight - scroll.clientHeight;
       var travel = scroll.clientHeight - el.offsetHeight;
-      if (max <= 0 || travel <= 0) { el.style.opacity = '0'; return; }
+      if (max <= 0 || travel <= 0) { el.style.opacity = '0'; rope.style.opacity = '0'; return; }
       el.style.opacity = '1';
+      rope.style.opacity = '1';
       var progress = Math.min(1, Math.max(0, scroll.scrollTop / max));
       el.style.transform = 'translateY(' + (top + progress * travel).toFixed(1) + 'px)';
     }

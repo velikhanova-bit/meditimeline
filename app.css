@@ -584,17 +584,36 @@ body.select-mode .assign-bar { display: flex; }
 }
 .toast.is-open { opacity: 1; transform: translate(-50%, 0); }
 
-/* ─── верхолаз на таймлайне ────────────────────────────────────────────
+/* ─── канат и человечек ────────────────────────────────────────────────
    Украшение. Чтобы убрать: удалить этот блок, строку <script src="./runner.js">
    в index.html и сам runner.js. На продуктовую логику ничто не завязано.
-   Фигурка стоит по центру линии: линия у .gap/.ev на left:28px, рамка
-   таймлайна добавляет свои var(--space-4), внутри вьюбокса верёвка на x=14. */
+
+   Канат идёт слева ОТ линии таймлайна: линия у .gap/.ev на left:28px плюс
+   var(--space-4) рамки, а канат на 15px — между краем экрана и лентой. */
+.tl-rope {
+  position: absolute;
+  left: calc(var(--space-4) - 1px);
+  width: 3px;
+  border-radius: 2px;
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur) var(--ease);
+  z-index: 1;
+  /* Витой шнур: косые пряди поверх ровной основы, всё в цветах темы,
+     чтобы не заводить отдельную палитру ради украшения. */
+  background:
+    repeating-linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--muted-fg) 45%, transparent) 0 2px,
+      transparent 2px 4px
+    ),
+    color-mix(in srgb, var(--muted-fg) 22%, transparent);
+}
+
 .tl-runner {
   position: absolute;
-  left: calc(var(--space-4) + 29px);
-  margin-left: -14px;          /* половина ширины: верёвка приходится на центр */
+  left: calc(var(--space-4) - 11px);   /* канат приходится на x=11 вьюбокса */
   top: 0;
-  width: 28px; height: 30px;
+  width: 30px; height: 32px;
   color: var(--primary);
   opacity: 0; pointer-events: none;
   transition: opacity var(--dur) var(--ease);
@@ -603,65 +622,62 @@ body.select-mode .assign-bar { display: flex; }
 }
 .tl-runner svg { width: 100%; height: 100%; display: block; overflow: visible; }
 
-/* Общий наклон корпуса: на спуске отклоняется от стены, на подъёме прижат */
-.tl-runner .figure { transform-origin: 14px 13px; }
-.tl-runner.is-down .figure { transform: rotate(4deg); }
-.tl-runner.is-up   .figure { transform: rotate(-2deg); }
+.tl-runner .arm-a, .tl-runner .arm-b { transform-origin: 17px 17px; }
+.tl-runner .leg-a, .tl-runner .leg-b { transform-origin: 17px 25px; }
+.tl-runner .figure { transform-origin: 17px 20px; }
 
-.tl-runner .arm-a, .tl-runner .arm-b { transform-origin: 14px 13px; }
-.tl-runner .leg-a, .tl-runner .leg-b { transform-origin: 14px 21px; }
-
-/* ─── спуск дюльфером ───────────────────────────────────────────────
-   Руки держат верёвку почти неподвижно, работа идёт ногами: отталкивание
-   от стены и мягкое приземление. Плюс лёгкое покачивание всей фигуры. */
-.tl-runner.is-down.is-moving .figure {
-  animation: mt-rappel var(--step, 400ms) ease-in-out infinite;
+/* ─── спуск: перебор руками ─────────────────────────────────────────
+   Руки поочерёдно отпускают канат и перехватывают ниже, ноги обхватом
+   придерживают — сжимаются в такт, но не перебирают. */
+.tl-runner.is-down.is-moving .arm-a { animation: mt-hand var(--step, 420ms) ease-in-out infinite; }
+.tl-runner.is-down.is-moving .arm-b {
+  animation: mt-hand var(--step, 420ms) ease-in-out infinite;
+  animation-delay: calc(var(--step, 420ms) / -2);
 }
-.tl-runner.is-down.is-moving .leg-a {
-  animation: mt-push var(--step, 400ms) ease-in-out infinite;
-}
+.tl-runner.is-down.is-moving .leg-a,
 .tl-runner.is-down.is-moving .leg-b {
-  animation: mt-push var(--step, 400ms) ease-in-out infinite;
-  animation-delay: calc(var(--step, 400ms) / -8);
+  animation: mt-hug var(--step, 420ms) ease-in-out infinite;
 }
+.tl-runner.is-down.is-moving .figure { animation: mt-slide var(--step, 420ms) linear infinite; }
 
-@keyframes mt-rappel {
-  0%   { transform: rotate(4deg)  translateY(0); }
-  45%  { transform: rotate(10deg) translateY(1.5px); }
-  100% { transform: rotate(4deg)  translateY(0); }
+@keyframes mt-hand {   /* отпустил — перехватил ниже */
+  0%   { transform: translateY(-2.5px) rotate(0deg); }
+  40%  { transform: translateY(2.5px)  rotate(6deg); }
+  100% { transform: translateY(-2.5px) rotate(0deg); }
 }
-@keyframes mt-push {
+@keyframes mt-hug {    /* обхват каната: лёгкое сжатие */
   0%   { transform: rotate(0deg); }
-  45%  { transform: rotate(-20deg); }
+  45%  { transform: rotate(5deg); }
   100% { transform: rotate(0deg); }
 }
-
-/* ─── подъём скалолазом ─────────────────────────────────────────────
-   Перехват крест-накрест: левая рука идёт вверх вместе с правой ногой. */
-.tl-runner.is-up.is-moving .arm-a,
-.tl-runner.is-up.is-moving .leg-b {
-  animation: mt-reach var(--step, 400ms) ease-in-out infinite;
+@keyframes mt-slide {  /* корпус подаётся вниз между перехватами */
+  0%   { transform: translateY(-0.7px); }
+  50%  { transform: translateY(0.9px); }
+  100% { transform: translateY(-0.7px); }
 }
+
+/* ─── подъём: рука и противоположная нога ───────────────────────────
+   Естественный крест: тянется левая рука — подтягивается правая нога. */
+.tl-runner.is-up.is-moving .arm-a,
+.tl-runner.is-up.is-moving .leg-b { animation: mt-pull var(--step, 420ms) ease-in-out infinite; }
 .tl-runner.is-up.is-moving .arm-b,
 .tl-runner.is-up.is-moving .leg-a {
-  animation: mt-reach var(--step, 400ms) ease-in-out infinite;
-  animation-delay: calc(var(--step, 400ms) / -2);
+  animation: mt-pull var(--step, 420ms) ease-in-out infinite;
+  animation-delay: calc(var(--step, 420ms) / -2);
 }
-.tl-runner.is-up.is-moving .figure {
-  animation: mt-haul var(--step, 400ms) ease-in-out infinite;
-}
+.tl-runner.is-up.is-moving .figure { animation: mt-haul var(--step, 420ms) ease-in-out infinite; }
 
-@keyframes mt-reach {
-  0%   { transform: rotate(14deg); }
-  50%  { transform: rotate(-16deg); }
-  100% { transform: rotate(14deg); }
+@keyframes mt-pull {
+  0%   { transform: translateY(2px) rotate(10deg); }
+  50%  { transform: translateY(-2.5px) rotate(-12deg); }
+  100% { transform: translateY(2px) rotate(10deg); }
 }
 @keyframes mt-haul {
-  0%   { transform: rotate(-2deg) translateY(0.8px); }
-  50%  { transform: rotate(-2deg) translateY(-0.8px); }
-  100% { transform: rotate(-2deg) translateY(0.8px); }
+  0%   { transform: translateY(0.9px); }
+  50%  { transform: translateY(-0.9px); }
+  100% { transform: translateY(0.9px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tl-runner { display: none; }
+  .tl-runner, .tl-rope { display: none; }
 }
