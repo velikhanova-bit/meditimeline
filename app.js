@@ -1472,6 +1472,10 @@
       '<div class="stack-sm">' +
         '<div class="section-label">Профили в аккаунте</div>' +
         state.profiles.map(function (x) { return profileRow(x, true); }).join('') +
+        // Подтверждение рисуется здесь, а не в общей зоне наверху: оттуда
+        // оно оказывалось выше видимой области и тап по корзине выглядел
+        // как будто кнопка мёртвая.
+        '<div id="pr-del-zone"></div>' +
         '<button class="btn btn-ghost" type="button" id="pr-add">Добавить профиль</button>' +
         '<p class="muted" style="font-size:11px">Отдельная история для родственника или ребёнка — ' + PRICE + ' ₽ разово.</p>' +
       '</div>' +
@@ -1490,6 +1494,7 @@
       '<div class="section-label">Аккаунт</div>' +
       '<p class="muted" style="font-size:var(--text-sm)">Вход по почте <b>' + esc(Auth.email()) + '</b></p>' +
       '<div id="acc-zone"></div>' +
+      '<button class="btn" type="button" id="pr-logout">Выйти</button>' +
       '<button class="btn btn-ghost" type="button" id="pr-pass">Изменить пароль</button>' +
       '<button class="btn btn-ghost is-danger" type="button" id="pr-wipe">Удалить аккаунт</button>' +
     '</div>';
@@ -1574,7 +1579,8 @@
     var docs = state.docs.filter(function (d) { return d.profileId === id; });
     var inds = docs.reduce(function (n, d) { return n + (d.indicators || []).length; }, 0);
 
-    $('#pr-edit-zone').innerHTML = '<div class="confirm">' +
+    var zone = $('#pr-del-zone');
+    zone.innerHTML = '<div class="confirm" style="margin-top:var(--space-2)">' +
       '<p>Удалить профиль «' + esc(p.name || 'Без имени') + '»? Вместе с ним исчезнут ' +
       docs.length + ' ' + plain(docs.length) + ' и ' + inds + ' ' +
       plural(inds, 'показатель', 'показателя', 'показателей') +
@@ -1583,6 +1589,7 @@
         '<button class="btn btn-danger" type="button" data-dp-yes="' + id + '">Удалить профиль</button>' +
         '<button class="btn btn-ghost" type="button" id="dp-no">Оставить</button>' +
       '</div></div>';
+    if (zone.scrollIntoView) zone.scrollIntoView({ block: 'nearest' });
   }
 
   function deleteProfile(id) {
@@ -1597,7 +1604,6 @@
         return saveProfiles();
       })
       .then(function () {
-        $('#pr-edit-zone').innerHTML = '';
         renderProfile(); renderProfileBtn(); renderFilterUI(); renderTimeline();
         toast('Профиль удалён');
       })
@@ -1629,10 +1635,11 @@
 
     var del = t.closest('[data-delprofile]');
     if (del) return askDeleteProfile(del.dataset.delprofile);
-    if (t.closest('#dp-no')) { $('#pr-edit-zone').innerHTML = ''; return; }
+    if (t.closest('#dp-no')) { $('#pr-del-zone').innerHTML = ''; return; }
     var yes = t.closest('[data-dp-yes]');
     if (yes) return deleteProfile(yes.dataset.dpYes);
 
+    if (t.closest('#pr-logout')) return logout();
     if (t.closest('#pr-pass')) { $('#acc-zone').innerHTML = passForm(); return; }
     if (t.closest('#cp-cancel')) { $('#acc-zone').innerHTML = ''; return; }
     if (t.closest('#pr-wipe')) { $('#acc-zone').innerHTML = wipeForm(); return; }
@@ -1750,11 +1757,13 @@
       });
   });
 
-  $('#logout').addEventListener('click', function () {
+  function logout() {
     Auth.lock();
+    closeSheet();
     go('login');
     toast('Вы вышли');
-  });
+  }
+  $('#logout').addEventListener('click', logout);
 
   $('#save-key').addEventListener('click', function () {
     var v = $('#api-key').value.trim();
