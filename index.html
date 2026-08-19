@@ -181,7 +181,7 @@
 
     <div class="screen-body stack-lg">
       <div class="stack-sm">
-        <p class="muted">ИИ разложил документы по системам организма. Если он ошибся — перенесите документ в другую группу или заведите свою.</p>
+        <p class="muted">ИИ разложил документы по системам организма. Если он ошибся — выделите документы долгим тапом и отметьте нужные группы: у одного документа их может быть несколько.</p>
         <div class="chip-row" id="group-chips"></div>
       </div>
 
@@ -194,7 +194,11 @@
     <div class="assign-bar">
       <div class="muted" id="assign-count">Выбрано документов: 0</div>
       <div class="chip-row" id="assign-chips"></div>
-      <button class="btn btn-ghost" id="cancel-select">Отменить выбор</button>
+      <button class="btn" id="assign-apply" type="button" disabled>Выберите группы</button>
+      <div class="assign-row">
+        <button class="btn btn-ghost" id="assign-reset" type="button">Вернуть выбор ИИ</button>
+        <button class="btn btn-ghost" id="cancel-select" type="button">Отмена</button>
+      </div>
     </div>
   </section>
 

@@ -175,9 +175,13 @@
   function samePerson(p, doc) {
     var dn = normName(doc.name), pn = normName(p.name);
     var db = doc.birthDate || '', pb = p.birth || '';
-    if (!dn && !db) return true;                       // нечего сравнивать
-    if (dn && pn && dn === pn) return true;
-    if (db && pb && db === pb && (!dn || !pn)) return true;
+
+    // В документе нет ни ФИО, ни даты рождения — сравнивать не с чем.
+    // Считаем своим: плохой скан не должен выкидывать в платный экран.
+    if (!dn && !db) return true;
+
+    // Профиль теперь всегда заполнен целиком, поэтому расхождение
+    // по любому из двух полей — достаточное основание считать документ чужим.
     if (dn && pn && dn !== pn) return false;
     if (db && pb && db !== pb) return false;
     return true;
@@ -188,7 +192,12 @@
     return myDocs().filter(function (d) { return isDate(d.date); })
       .sort(function (a, b) { return D(b.date) - D(a.date); });
   }
+  // Группы документа: по умолчанию — те, что ИИ проставил его показателям.
+  // Если человек назначил группы руками, его выбор перекрывает вывод ИИ.
+  // Отдельное поле, а не переписывание system у показателей: у одного
+  // документа групп может быть несколько, а у показателя система одна.
   function docSystems(doc) {
+    if (doc.systems && doc.systems.length) return doc.systems.slice();
     var set = [];
     (doc.indicators || []).forEach(function (i) {
       if (i.system && set.indexOf(i.system) < 0) set.push(i.system);
@@ -577,7 +586,8 @@
     var name = $('#su-name').value.trim();
     var birthRu = $('#su-birth').value.trim();
     var birth = fromRu(birthRu);
-    if (birthRu && !birth) return toast('Дата рождения — в виде 24.07.1988');
+    var bad = validateIdentity(name, birthRu, birth);
+    if (bad) return toast(bad);
 
     var adding = !!state.paidPending;
     var email = $('#su-email').value.trim();
@@ -588,7 +598,6 @@
       if (pass.length < Auth.MIN_LEN) return toast('Пароль — не короче ' + Auth.MIN_LEN + ' символов');
       if (pass !== pass2) { $('#su-pass-hint').hidden = false; return toast('Пароли не совпадают'); }
     }
-    if (adding && !name) return toast('Впишите, чей это профиль');
 
     var p = {
       id: DB.uid(),
@@ -895,29 +904,35 @@
     }).join('') + '<button class="chip chip-ghost" id="add-group" type="button">+ Своя группа</button>';
 
     $('#assign-chips').innerHTML = systems.map(function (s) {
-      return '<button class="chip" type="button" data-assign="' + esc(s.name) + '">' + esc(s.name) + '</button>';
+      return '<button class="chip" type="button" data-assign="' + esc(s.name) + '">' +
+        '<span class="tick">' + I.check + '</span>' + esc(s.name) + '</button>';
     }).join('');
 
     $('#group-doclist').innerHTML = dated().concat(
       myDocs().filter(function (d) { return !isDate(d.date); })
     ).map(function (d) {
+      var manual = d.systems && d.systems.length;
       return '<div class="doc-select-row" data-id="' + d.id + '">' +
         '<span class="checkbox">' + I.check + '</span>' +
         '<span class="fmeta"><strong>' + esc(d.title) + '</strong>' +
           '<span>' + (isDate(d.date) ? ruDate(d.date) : 'без даты') +
-          (d.clinic ? ' · ' + esc(d.clinic) : '') + '</span></span>' +
+          (d.clinic ? ' · ' + esc(d.clinic) : '') +
+          (manual ? ' · группы заданы вручную' : '') + '</span></span>' +
         '<span class="badges">' + docSystems(d).map(badge).join('') + '</span>' +
       '</div>';
     }).join('') || '<p class="muted">Документов пока нет</p>';
 
     refreshSelection();
+    syncAssign();
   }
 
   function refreshSelection() {
     $('#group-doclist').querySelectorAll('.doc-select-row').forEach(function (r) {
       r.classList.toggle('is-selected', selected.has(r.dataset.id));
     });
-    $('#assign-count').textContent = 'Выбрано документов: ' + selected.size;
+    $('#assign-count').textContent = 'Выбрано документов: ' + selected.size +
+      '. Отметьте одну или несколько групп.';
+    syncAssign();
   }
 
   $('#group-chips').addEventListener('click', function (e) {
@@ -925,15 +940,19 @@
     var name = prompt('Название группы, например «Беременность»');
     if (!name || !name.trim()) return;
     name = name.trim();
-    if (!selected.size) {
-      toast('Выделите документы долгим тапом, потом перенесите их в «' + name + '»');
-      // Группа без документов нигде не хранится — покажем её как цель переноса
+    // Пустая группа нигде не хранится: она существует, только пока в ней
+    // есть документы. Показываем её как цель присвоения и ждём выбора.
+    if (!$('#assign-chips').querySelector('[data-assign="' + name.replace(/"/g, '') + '"]')) {
       $('#assign-chips').insertAdjacentHTML('beforeend',
-        '<button class="chip" type="button" data-assign="' + esc(name) + '">' + esc(name) + '</button>');
-      document.body.classList.add('select-mode');
-      return;
+        '<button class="chip" type="button" data-assign="' + esc(name) + '">' +
+        '<span class="tick">' + I.check + '</span>' + esc(name) + '</button>');
     }
-    assignTo(name);
+    chosen.add(name);
+    document.body.classList.add('select-mode');
+    syncAssign();
+    toast(selected.size
+      ? 'Группа «' + name + '» отмечена — нажмите «Присвоить»'
+      : 'Выделите документы долгим тапом, затем нажмите «Присвоить»');
   });
 
   var list = $('#group-doclist');
@@ -964,30 +983,65 @@
   });
   document.querySelector('[data-screen="groups"] .assign-bar').addEventListener('click', function (e) {
     var chip = e.target.closest('[data-assign]');
-    if (chip) assignTo(chip.dataset.assign);
+    if (chip) {
+      var g = chip.dataset.assign;
+      if (chosen.has(g)) chosen.delete(g); else chosen.add(g);
+      return syncAssign();
+    }
+    if (e.target.closest('#assign-apply')) return assignChosen();
+    if (e.target.closest('#assign-reset')) return resetGroups();
   });
 
   // Перенос документа в группу переписывает system у всех его показателей:
   // «группа документа» — это и есть общая группа его показателей.
-  function assignTo(group) {
+  // Группы копятся в наборе, применяются одним нажатием: документ может
+  // принадлежать нескольким системам сразу — общий анализ крови это
+  // и «Кровь», и «Витамины и железо».
+  var chosen = new Set();
+
+  function syncAssign() {
+    $('#assign-chips').querySelectorAll('[data-assign]').forEach(function (c) {
+      c.classList.toggle('is-active', chosen.has(c.dataset.assign));
+    });
+    var btn = $('#assign-apply');
+    btn.disabled = !selected.size || !chosen.size;
+    btn.textContent = chosen.size
+      ? 'Присвоить ' + chosen.size + ' ' + plural(chosen.size, 'группу', 'группы', 'групп')
+      : 'Выберите группы';
+  }
+
+  function assignChosen() {
     if (!selected.size) return toast('Сначала выделите документы');
-    var ids = Array.from(selected);
-    var moved = 0;
-    var docs = ids.map(function (id) {
+    if (!chosen.size) return toast('Выберите хотя бы одну группу');
+
+    var groups = Array.from(chosen);
+    var docs = Array.from(selected).map(function (id) {
       return state.docs.filter(function (d) { return d.id === id; })[0];
     }).filter(Boolean);
 
-    docs.forEach(function (d) {
-      (d.indicators || []).forEach(function (i) { i.system = group; moved++; });
-    });
+    docs.forEach(function (d) { d.systems = groups.slice(); });
 
     Promise.all(docs.map(function (d) { return DB.put(d); })).then(function () {
       document.body.classList.remove('select-mode');
       selected.clear();
+      chosen.clear();
       renderGroups();
       renderFilterUI();
-      toast(docs.length + ' ' + plain(docs.length) + ' и ' + moved + ' ' +
-        plural(moved, 'показатель', 'показателя', 'показателей') + ' — в «' + group + '»');
+      toast(docs.length + ' ' + plain(docs.length) + ' → ' + groups.join(', '));
+    });
+  }
+
+  // Вернуть документу разбивку, которую предложил ИИ
+  function resetGroups() {
+    var docs = Array.from(selected).map(function (id) {
+      return state.docs.filter(function (d) { return d.id === id; })[0];
+    }).filter(Boolean);
+    docs.forEach(function (d) { delete d.systems; });
+    Promise.all(docs.map(function (d) { return DB.put(d); })).then(function () {
+      document.body.classList.remove('select-mode');
+      selected.clear(); chosen.clear();
+      renderGroups(); renderFilterUI();
+      toast('Вернули группы, которые предложил ИИ');
     });
   }
 
@@ -1300,6 +1354,7 @@
             ? 'Профиль заполнен из ваших документов'
             : 'Документов пока нет — загрузите первые') + '</p>' +
         '</div></div>' +
+      '<div id="pr-edit-zone"></div>' +
       '<div class="card"><dl style="margin:0">' +
         '<div class="kv"><dt>Дата рождения</dt><dd>' + (p && p.birth ? ruDate(p.birth) : '—') + '</dd></div>' +
         '<div class="kv"><dt>Возраст</dt><dd>' + (p && p.birth ? yearsText(p.birth, new Date()) : '—') + '</dd></div>' +
@@ -1307,6 +1362,7 @@
         '<div class="kv"><dt>Показателей</dt><dd>' + indCount + '</dd></div>' +
         '<div class="kv"><dt>История с</dt><dd>' + (ds.length ? ruDate(ds[ds.length - 1].date) : '—') + '</dd></div>' +
       '</dl></div>' +
+      '<button class="btn btn-ghost" type="button" id="pr-editme">Изменить мои данные</button>' +
       '<div class="stack-sm">' +
         '<div class="section-label">Профили в аккаунте</div>' +
         state.profiles.map(profileRow).join('') +
@@ -1331,6 +1387,62 @@
       '<button class="btn btn-ghost" type="button" id="pr-pass">Изменить пароль</button>' +
       '<button class="btn btn-ghost is-danger" type="button" id="pr-wipe">Удалить аккаунт</button>' +
     '</div>';
+  }
+
+  function meForm() {
+    var p = current() || {};
+    return '<div class="card stack" style="background:var(--muted)">' +
+      '<div class="section-label">Мои данные</div>' +
+      '<label class="field"><span class="label">Фамилия, имя, отчество</span>' +
+        '<input type="text" id="me-name" value="' + esc(p.name || '') + '" autocomplete="name"></label>' +
+      '<label class="field"><span class="label">Дата рождения</span>' +
+        '<input type="text" id="me-birth" value="' + esc(toRu(p.birth) || '') + '" placeholder="ДД.ММ.ГГГГ" inputmode="numeric"></label>' +
+      '<label class="field"><span class="label">Пол</span>' +
+        '<select id="me-sex">' +
+          '<option value="unknown"' + (p.sex === 'female' || p.sex === 'male' ? '' : ' selected') + '>не указан</option>' +
+          '<option value="female"' + (p.sex === 'female' ? ' selected' : '') + '>женский</option>' +
+          '<option value="male"' + (p.sex === 'male' ? ' selected' : '') + '>мужской</option>' +
+        '</select></label>' +
+      '<p class="muted" style="font-size:11px">Дата рождения — нижний конец шкалы таймлайна, от неё считается ваш возраст в каждом документе.</p>' +
+      '<div class="row" style="display:flex;gap:var(--space-2)">' +
+        '<button class="btn" type="button" id="me-save">Сохранить</button>' +
+        '<button class="btn btn-ghost" type="button" id="me-cancel">Отмена</button>' +
+      '</div></div>';
+  }
+
+  function saveMe() {
+    var p = current();
+    if (!p) return;
+    var name = $('#me-name').value.trim();
+    var birthRu = $('#me-birth').value.trim();
+    var birth = fromRu(birthRu);
+
+    var bad = validateIdentity(name, birthRu, birth);
+    if (bad) return toast(bad);
+
+    p.name = name;
+    p.birth = birth;
+    p.sex = $('#me-sex').value;
+    saveProfiles().then(function () {
+      $('#pr-edit-zone').innerHTML = '';
+      renderProfile();
+      renderProfileBtn();
+      renderTimeline();
+      toast('Данные обновлены');
+    });
+  }
+
+  // Одно правило на регистрацию и на правку профиля: ФИО целиком и дата
+  // рождения. Без них шкала таймлайна не строится, а чужой документ
+  // не с чем сравнить.
+  function validateIdentity(name, birthRu, birthIso) {
+    var words = name.split(/\s+/).filter(Boolean);
+    if (words.length < 2) return 'Впишите ФИО полностью — фамилию, имя и отчество';
+    if (!birthRu) return 'Впишите дату рождения — без неё не построить шкалу';
+    if (!birthIso) return 'Дата рождения — в виде 24.07.1988';
+    var y = +birthIso.slice(0, 4);
+    if (y < 1900 || D(birthIso) > new Date()) return 'Проверьте дату рождения';
+    return '';
   }
 
   function passForm() {
@@ -1365,6 +1477,10 @@
       state.addProfile = true;
       return go('foreign');
     }
+
+    if (t.closest('#pr-editme')) { $('#pr-edit-zone').innerHTML = meForm(); return; }
+    if (t.closest('#me-cancel')) { $('#pr-edit-zone').innerHTML = ''; return; }
+    if (t.closest('#me-save')) return saveMe();
 
     if (t.closest('#pr-pass')) { $('#acc-zone').innerHTML = passForm(); return; }
     if (t.closest('#cp-cancel')) { $('#acc-zone').innerHTML = ''; return; }
