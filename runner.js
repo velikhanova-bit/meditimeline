@@ -1,20 +1,20 @@
 /**
- * Человечек, бегущий по таймлайну вместе со скроллом.
+ * Фигурка на верёвке таймлайна.
+ *
+ * Вниз — спускается дюльфером: висит на прямых руках, ноги упираются
+ * в стену, корпус слегка отклонён. Вверх — карабкается: руки и ноги
+ * перехватывают по очереди.
  *
  * Украшение. Держится в отдельном файле намеренно: чтобы убрать, достаточно
- * снять одну строку <script> в index.html и блок «бегунок» в app.css —
- * ни одна строка продуктовой логики не завязана на этот код.
- *
- * Поведение: положение по вертикали повторяет прогресс прокрутки, лицом
- * вниз при движении вниз и вверх при движении вверх, частота шага растёт
- * со скоростью прокрутки. Когда прокрутка замирает — переходит в покой.
+ * снять одну строку <script> в index.html и блок «верхолаз» в app.css —
+ * ни одна строка продуктовой логики на этот код не завязана.
  */
 (function (global) {
   'use strict';
 
-  var STEP_FAST = 140;   // мс на шаг при быстрой прокрутке
-  var STEP_SLOW = 460;   // мс на шаг при медленной
-  var IDLE_AFTER = 160;  // через столько тишины считаем, что человек остановился
+  var STEP_FAST = 190;   // мс на перехват при быстрой прокрутке
+  var STEP_SLOW = 620;   // мс на перехват при медленной
+  var IDLE_AFTER = 170;  // через столько тишины считаем, что человек замер
 
   function init() {
     var scroll = document.getElementById('tl-scroll');
@@ -27,16 +27,20 @@
 
     var el = document.createElement('div');
     el.id = 'tl-runner';
-    el.className = 'tl-runner';
+    el.className = 'tl-runner is-down';
     el.setAttribute('aria-hidden', 'true');   // декорация, скринридеру не нужна
+    // Верёвка — сама линия таймлайна, она проходит по x=14 внутри вьюбокса.
     el.innerHTML =
-      '<svg viewBox="0 0 28 34" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">' +
-        '<circle cx="14" cy="5.5" r="3.6" fill="currentColor" stroke="none"/>' +
-        '<path class="body" d="M14 10v9"/>' +
-        '<path class="arm-a" d="M14 12.5 8 16"/>' +
-        '<path class="arm-b" d="M14 12.5 20 16"/>' +
-        '<path class="leg-a" d="M14 19 9 27"/>' +
-        '<path class="leg-b" d="M14 19 19 27"/>' +
+      '<svg viewBox="0 0 28 38" fill="none" stroke="currentColor" ' +
+           'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' +
+        '<g class="figure">' +
+          '<circle class="head" cx="14" cy="6" r="3.6" fill="currentColor" stroke="none"/>' +
+          '<path class="torso" d="M14 10v11"/>' +
+          '<path class="arm-a" d="M14 13 9 6"/>' +
+          '<path class="arm-b" d="M14 13 19 8"/>' +
+          '<path class="leg-a" d="M14 21 8 28"/>' +
+          '<path class="leg-b" d="M14 21 19 29"/>' +
+        '</g>' +
       '</svg>';
     frame.appendChild(el);
 
@@ -63,7 +67,10 @@
       var dt = Math.max(1, now - lastAt);
       last = pos; lastAt = now;
 
-      if (dy) el.classList.toggle('is-up', dy < 0);
+      if (dy) {
+        el.classList.toggle('is-up', dy < 0);
+        el.classList.toggle('is-down', dy > 0);
+      }
 
       // Считаем в пикселях на кадр, а не px/мс: события скролла приходят
       // с рваным интервалом, и в миллисекундах даже спокойная прокрутка
@@ -72,12 +79,12 @@
       var t = Math.min(1, Math.max(0, (perFrame - 4) / 56));   // 4..60 px/кадр
       var step = STEP_SLOW - (STEP_SLOW - STEP_FAST) * t;
       el.style.setProperty('--step', step.toFixed(0) + 'ms');
-      el.classList.add('is-running');
+      el.classList.add('is-moving');
 
       if (!pending) { pending = true; requestAnimationFrame(place); }
 
       clearTimeout(idleTimer);
-      idleTimer = setTimeout(function () { el.classList.remove('is-running'); }, IDLE_AFTER);
+      idleTimer = setTimeout(function () { el.classList.remove('is-moving'); }, IDLE_AFTER);
     }
 
     scroll.addEventListener('scroll', onScroll, { passive: true });

@@ -584,3 +584,84 @@ body.select-mode .assign-bar { display: flex; }
 }
 .toast.is-open { opacity: 1; transform: translate(-50%, 0); }
 
+/* ─── верхолаз на таймлайне ────────────────────────────────────────────
+   Украшение. Чтобы убрать: удалить этот блок, строку <script src="./runner.js">
+   в index.html и сам runner.js. На продуктовую логику ничто не завязано.
+   Фигурка стоит по центру линии: линия у .gap/.ev на left:28px, рамка
+   таймлайна добавляет свои var(--space-4), внутри вьюбокса верёвка на x=14. */
+.tl-runner {
+  position: absolute;
+  left: calc(var(--space-4) + 29px);
+  margin-left: -14px;          /* половина ширины: верёвка приходится на центр */
+  top: 0;
+  width: 28px; height: 30px;
+  color: var(--primary);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--dur) var(--ease);
+  will-change: transform;
+  z-index: 2;
+}
+.tl-runner svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+/* Общий наклон корпуса: на спуске отклоняется от стены, на подъёме прижат */
+.tl-runner .figure { transform-origin: 14px 13px; }
+.tl-runner.is-down .figure { transform: rotate(4deg); }
+.tl-runner.is-up   .figure { transform: rotate(-2deg); }
+
+.tl-runner .arm-a, .tl-runner .arm-b { transform-origin: 14px 13px; }
+.tl-runner .leg-a, .tl-runner .leg-b { transform-origin: 14px 21px; }
+
+/* ─── спуск дюльфером ───────────────────────────────────────────────
+   Руки держат верёвку почти неподвижно, работа идёт ногами: отталкивание
+   от стены и мягкое приземление. Плюс лёгкое покачивание всей фигуры. */
+.tl-runner.is-down.is-moving .figure {
+  animation: mt-rappel var(--step, 400ms) ease-in-out infinite;
+}
+.tl-runner.is-down.is-moving .leg-a {
+  animation: mt-push var(--step, 400ms) ease-in-out infinite;
+}
+.tl-runner.is-down.is-moving .leg-b {
+  animation: mt-push var(--step, 400ms) ease-in-out infinite;
+  animation-delay: calc(var(--step, 400ms) / -8);
+}
+
+@keyframes mt-rappel {
+  0%   { transform: rotate(4deg)  translateY(0); }
+  45%  { transform: rotate(10deg) translateY(1.5px); }
+  100% { transform: rotate(4deg)  translateY(0); }
+}
+@keyframes mt-push {
+  0%   { transform: rotate(0deg); }
+  45%  { transform: rotate(-20deg); }
+  100% { transform: rotate(0deg); }
+}
+
+/* ─── подъём скалолазом ─────────────────────────────────────────────
+   Перехват крест-накрест: левая рука идёт вверх вместе с правой ногой. */
+.tl-runner.is-up.is-moving .arm-a,
+.tl-runner.is-up.is-moving .leg-b {
+  animation: mt-reach var(--step, 400ms) ease-in-out infinite;
+}
+.tl-runner.is-up.is-moving .arm-b,
+.tl-runner.is-up.is-moving .leg-a {
+  animation: mt-reach var(--step, 400ms) ease-in-out infinite;
+  animation-delay: calc(var(--step, 400ms) / -2);
+}
+.tl-runner.is-up.is-moving .figure {
+  animation: mt-haul var(--step, 400ms) ease-in-out infinite;
+}
+
+@keyframes mt-reach {
+  0%   { transform: rotate(14deg); }
+  50%  { transform: rotate(-16deg); }
+  100% { transform: rotate(14deg); }
+}
+@keyframes mt-haul {
+  0%   { transform: rotate(-2deg) translateY(0.8px); }
+  50%  { transform: rotate(-2deg) translateY(-0.8px); }
+  100% { transform: rotate(-2deg) translateY(0.8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tl-runner { display: none; }
+}
