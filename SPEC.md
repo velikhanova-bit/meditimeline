@@ -106,5 +106,7 @@
 
 ## Ссылки
 
-- Живой URL (или инвайт в TestFlight): … (появится после `bin/ship`)
-- Репозиторий: …
+- Живой URL: https://velikhanova-bit.github.io/meditimeline/
+- Репозиторий: https://github.com/velikhanova-bit/meditimeline
+
+Обновить прод после правок: `bash ../hackathon-harness/bin/ship` из папки проекта.
