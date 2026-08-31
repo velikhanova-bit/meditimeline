@@ -286,17 +286,31 @@
       '\nРеференсный интервал: ' + (ind.norm ? ind.norm + (ind.unit ? ' ' + ind.unit : '') : 'в документе не указан') +
       (who.length ? '\nПациент: ' + who.join(', ') : '');
 
+    // Без таймаута зависшая сеть означает вечный спиннер: fetch сам
+    // не отвалится никогда. Сорок секунд с запасом — обычный ответ идёт 5.
+    var ctrl = global.AbortController ? new AbortController() : null;
+    var timer = ctrl && setTimeout(function () { ctrl.abort(); }, 40000);
+
     return fetch(API, {
       method: 'POST',
+      signal: ctrl ? ctrl.signal : undefined,
       headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + key },
       body: JSON.stringify({
         model: model || DEFAULT_MODEL,
         instructions: EXPLAIN_PROMPT,
-        max_output_tokens: 2000,
+        max_output_tokens: 3000,
         reasoning: { effort: 'low' },
         input: [{ role: 'user', content: [{ type: 'input_text', text: text }] }],
         text: { format: { type: 'json_schema', name: 'explanation', strict: true, schema: EXPLAIN_SCHEMA } }
       })
+    }).catch(function (err) {
+      if (timer) clearTimeout(timer);
+      throw new Error(err && err.name === 'AbortError'
+        ? 'Ответ не пришёл за 40 секунд — попробуйте ещё раз'
+        : 'Нет связи с OpenAI');
+    }).then(function (res) {
+      if (timer) clearTimeout(timer);
+      return res;
     }).then(function (res) {
       if (!res.ok) {
         return res.text().then(function (t) {

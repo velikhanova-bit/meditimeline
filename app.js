@@ -27,6 +27,9 @@
     backTo: 'upload',
     signupDraft: null,   // что подставить в форму регистрации
     signupDocs: [],      // документы, ждущие привязки к новому профилю
+    tipsOpen: {},        // id показателей, у которых карточка развёрнута
+    tipsBusy: {},        // id показателей, по которым идёт запрос
+    tipsErr: {},         // id -> текст ошибки последнего запроса
     foreign: null        // {patient, docs} — чужие документы, ждут оплаты
   };
 
@@ -1209,8 +1212,25 @@
             I.history + ' Динамика · ' + pts.length + '</button>' : '') +
         '</div>') +
       '<button class="ind-edit" type="button" data-edit="' + ind.id + '" aria-label="Редактировать">' + I.pencil + '</button>' +
-      (askable ? '<div class="ind-tip" data-tip="' + ind.id + '">' + tipHtml(ind) + '</div>' : '') +
+      (askable ? '<div class="ind-tip" data-tip="' + ind.id + '">' + tipSlot(ind) + '</div>' : '') +
     '</div>';
+  }
+
+  // Что показать в слоте — решает состояние, а не тот, кто кликнул.
+  // Раньше обработчик держался за конкретный узел DOM и после долгого
+  // ответа обновлял узел, которого уже могло не быть: спиннер оставался
+  // навсегда, хотя ответ давно пришёл и лежал в базе.
+  function tipSlot(ind) {
+    if (state.tipsBusy[ind.id]) {
+      return '<div class="tip-card is-loading"><span class="spinner"></span>' +
+        '<span>Объясняем показатель…</span></div>';
+    }
+    if (state.tipsErr[ind.id]) {
+      return '<div class="tip-card is-out"><p class="tip-line">' + esc(state.tipsErr[ind.id]) +
+        '</p><p class="tip-foot">Нажмите на показатель ещё раз, чтобы повторить.</p></div>';
+    }
+    if (!state.tipsOpen[ind.id]) return '';
+    return tipHtml(ind);
   }
 
   // Подсказка живёт прямо в показателе: один раз запрошенная, она остаётся
@@ -1326,23 +1346,27 @@
     var ind = (doc.indicators || []).filter(function (i) { return i.id === indId; })[0];
     if (!ind) return;
 
-    var slot = document.querySelector('[data-tip="' + indId + '"]');
-    if (!slot) return;
+    // Запрос уже идёт — второй тап ничего не должен ломать
+    if (state.tipsBusy[indId]) return;
 
-    // Второй тап сворачивает уже показанную подсказку
-    if (ind.tip && slot.innerHTML.trim()) { slot.innerHTML = ''; return; }
-    if (ind.tip) { slot.innerHTML = tipHtml(ind); return; }
+    // Была ошибка — тап повторяет попытку
+    if (state.tipsErr[indId]) delete state.tipsErr[indId];
+    else if (state.tipsOpen[indId]) {          // открыто — сворачиваем
+      delete state.tipsOpen[indId];
+      return refreshTip(indId);
+    } else if (ind.tip) {                      // уже спрашивали — просто показываем
+      state.tipsOpen[indId] = 1;
+      return refreshTip(indId);
+    }
 
     var key = apiKey();
     if (!key) {
-      slot.innerHTML = '<div class="tip-card is-unknown"><p class="tip-line">' +
-        'Чтобы получить объяснение, нужен ключ OpenAI — тот же, что и для распознавания. ' +
-        '<button class="aslink" type="button" data-go="settings">Добавить ключ</button></p></div>';
-      return;
+      state.tipsErr[indId] = 'Чтобы получить объяснение, нужен ключ OpenAI — тот же, что и для распознавания. Добавьте его в настройках.';
+      return refreshTip(indId);
     }
 
-    slot.innerHTML = '<div class="tip-card is-loading"><span class="spinner"></span>' +
-      '<span>Объясняем показатель…</span></div>';
+    state.tipsBusy[indId] = 1;
+    refreshTip(indId);
 
     var p = current();
     var person = {
@@ -1353,18 +1377,30 @@
     Extract.explain(ind, person, key, model())
       .then(function (tip) {
         ind.tip = tip;
-        return DB.put(doc).then(function () {
-          var live = document.querySelector('[data-tip="' + indId + '"]');
-          if (live) live.innerHTML = tipHtml(ind);
-        });
+        return DB.put(doc);
+      })
+      .then(function () {
+        delete state.tipsBusy[indId];
+        state.tipsOpen[indId] = 1;
+        refreshTip(indId);
       })
       .catch(function (err) {
-        var live = document.querySelector('[data-tip="' + indId + '"]');
-        if (live) {
-          live.innerHTML = '<div class="tip-card is-out"><p class="tip-line">' +
-            esc(err.message || 'Не получилось объяснить') + '</p></div>';
-        }
+        delete state.tipsBusy[indId];
+        state.tipsErr[indId] = err.message || 'Не получилось объяснить';
+        refreshTip(indId);
       });
+  }
+
+  // Перерисовываем только слот нужного показателя, если он на экране.
+  // Ничего не ломается, даже если слоя уже нет: состояние всё равно
+  // сохранено и отрисуется при следующем открытии.
+  function refreshTip(indId) {
+    var doc = state.docs.filter(function (d) { return d.id === openDocId; })[0];
+    if (!doc) return;
+    var ind = (doc.indicators || []).filter(function (i) { return i.id === indId; })[0];
+    if (!ind) return;
+    var slot = document.querySelector('[data-tip="' + indId + '"]');
+    if (slot) slot.innerHTML = tipSlot(ind);
   }
 
   function saveIndicator(indId) {
