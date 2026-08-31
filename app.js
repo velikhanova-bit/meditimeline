@@ -1824,6 +1824,33 @@
     go(myDocs().length ? 'timeline' : 'upload');
   }
 
+  // ─── экран запуска ─────────────────────────────────────────────────
+  // Заставка держит первый кадр, пока данные читаются из IndexedDB.
+  // Дальше уходит сама: два прохода анимации это 3,6 с, ждём 3,9 с.
+  // Пропустить можно тапом в любом месте — на второй раз заставка надоедает.
+  var SPLASH_MS = 3900;
+  var splashDone = false;
+
+  function leaveSplash() {
+    if (splashDone) return;
+    splashDone = true;
+    if (state.ready) boot();          // данные уже прочитаны — уходим сразу
+    else state.splashOver = true;     // иначе уйдём, когда чтение закончится
+  }
+
+  function startSplash() {
+    var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var wait = reduced ? 900 : SPLASH_MS;
+    setTimeout(function () {
+      var st = $('#splash-status');
+      if (st) { st.textContent = 'Приложение готово к работе'; st.classList.add('is-ready'); }
+      setTimeout(leaveSplash, 450);
+    }, wait);
+  }
+
+  $('#splash-skip').addEventListener('click', leaveSplash);
+  document.querySelector('[data-screen="splash"]').addEventListener('click', leaveSplash);
+
   Promise.all([DB.all(), DB.getMeta('profiles'), DB.getMeta('currentId'), Auth.load()])
     .then(function (r) {
       state.docs = r[0] || [];
@@ -1845,11 +1872,16 @@
           .then(saveProfiles);
       }
     })
-    .then(boot)
+    .then(function () {
+      state.ready = true;
+      if (splashDone || state.splashOver) boot();
+    })
     .catch(function (err) {
       console.error(err);
+      state.ready = true;
       toast('Не удалось открыть хранилище браузера');
       renderUpload();
+      if (splashDone || state.splashOver) go('upload');
     });
 
   // Марка в левом верхнем углу каждого экрана. Вставляем скриптом:
@@ -1867,6 +1899,8 @@
     wrap.appendChild(b);
     wrap.appendChild(h1);
   });
+
+  startSplash();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

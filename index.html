@@ -18,6 +18,33 @@
 
 <div class="device">
 
+  <!-- ═══ ЗАПУСК ═══════════════════════════════════════════════════ -->
+  <section class="screen is-active" data-screen="splash">
+    <div class="splash">
+      <div class="splash-top">
+        <span class="splash-brand">MedTimeline</span>
+        <p class="splash-sub">Ваша история здоровья — из ваших же документов</p>
+      </div>
+
+      <div class="splash-stage" aria-hidden="true">
+        <div class="sdoc sdoc-1"><span class="sdoc-tag">Анализы</span></div>
+        <div class="sdoc sdoc-2"><span class="sdoc-tag">Заключения</span></div>
+        <div class="sdoc sdoc-3"><span class="sdoc-tag">Выписки</span></div>
+
+        <div class="splash-drop">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+            <path d="M12 16V4M12 4l-4 4M12 4l4 4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Окно загрузки</span>
+        </div>
+      </div>
+
+      <p class="splash-status" id="splash-status">Собираем таймлайн из ваших документов</p>
+      <button class="btn btn-ghost" id="splash-skip" type="button">Пропустить</button>
+    </div>
+  </section>
+
   <!-- ═══ ВХОД ═════════════════════════════════════════════════════ -->
   <section class="screen" data-screen="login">
     <div class="topbar"><h1 class="solo">Вход</h1></div>
@@ -48,7 +75,7 @@
   </section>
 
   <!-- ═══ ЗАГРУЗКА ═════════════════════════════════════════════════ -->
-  <section class="screen is-active" data-screen="upload">
+  <section class="screen" data-screen="upload">
     <div class="topbar">
       <h1 class="solo">Мои документы</h1>
       <button class="iconbtn" data-go="settings" aria-label="Настройки">
