@@ -805,7 +805,7 @@ body.select-mode .assign-bar { display: flex; }
 .splash-tl {
   position: relative;
   width: 100%; max-width: 21rem;
-  padding: var(--space-4) var(--space-2) var(--space-2);
+  height: 34px;
 }
 .stl-line {
   position: absolute; left: 12%; right: 12%; top: 22px; height: 2px;
@@ -822,15 +822,39 @@ body.select-mode .assign-bar { display: flex; }
 .stl-1 { left: 25%; }
 .stl-2 { left: 50%; animation-delay: 0.7s; }
 .stl-3 { left: 75%; animation-delay: 1.4s; }
-.stl-cap {
-  display: block; margin-top: var(--space-5);
-  font-size: 11px; color: var(--muted-fg);
-}
-
 @keyframes splash-mark {
   0%, 30%  { background: var(--card); border-color: var(--border); transform: scale(1); }
   40%      { background: var(--primary); border-color: var(--primary); transform: scale(1.35); }
   100%     { background: var(--primary); border-color: var(--primary); transform: scale(1); }
+}
+
+
+/* ─── что делает приложение ────────────────────────────────────────────
+   Строки сменяют друг друга по кругу. Цикл 5,4 с на три строки: каждая
+   полностью видна 1,5 с плюс плавные края — этого хватает, чтобы прочесть
+   фразу из семи слов, не торопясь. */
+.splash-feats {
+  position: relative;
+  width: 100%; max-width: 20rem;
+  min-height: 3.2em;
+}
+.sfeat {
+  position: absolute; left: 0; right: 0; top: 0;
+  margin: 0;
+  font-size: var(--text-base); font-weight: 600;
+  line-height: 1.35; color: var(--fg);
+  opacity: 0;
+  animation: sfeat-show 5.4s ease-in-out infinite;
+}
+.sfeat-2 { animation-delay: 1.8s; }
+.sfeat-3 { animation-delay: 3.6s; }
+
+@keyframes sfeat-show {
+  0%   { opacity: 0; transform: translateY(7px); }
+  6%   { opacity: 1; transform: translateY(0); }
+  28%  { opacity: 1; transform: translateY(0); }
+  34%  { opacity: 0; transform: translateY(-7px); }
+  100% { opacity: 0; transform: translateY(-7px); }
 }
 
 .splash-status { font-size: var(--text-sm); color: var(--muted-fg); min-height: 1.4em; }
@@ -838,7 +862,8 @@ body.select-mode .assign-bar { display: flex; }
 
 /* Кому анимации мешают — показываем готовый кадр без движения */
 @media (prefers-reduced-motion: reduce) {
-  .sdoc, .splash-drop, .splash-hero, .splash-hero .arm-give, .stl-dot { animation: none; }
+  .sdoc, .splash-drop, .splash-hero, .splash-hero .arm-give, .stl-dot, .sfeat { animation: none; }
+  .sfeat-1 { opacity: 1; }
   .sdoc-1 { opacity: 1; transform: translate(20px, -34px) rotate(-7deg) scale(0.78); }
   .sdoc-2 { opacity: 1; transform: translate(28px, 6px) rotate(5deg) scale(0.78); }
   .sdoc-3 { opacity: 0; }
