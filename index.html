@@ -27,6 +27,21 @@
       </div>
 
       <div class="splash-stage" aria-hidden="true">
+        <!-- тот же человечек, что бегает по таймлайну: висит на канате
+             и передаёт документы в окно загрузки -->
+        <div class="splash-rope"></div>
+        <div class="splash-hero">
+          <svg viewBox="0 0 30 40" fill="none" stroke="currentColor"
+               stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <circle class="head" cx="18" cy="11" r="3.5" fill="currentColor" stroke="none"/>
+            <path class="torso" d="M17.5 14.5V25"/>
+            <path class="arm-hold" d="M17 16.5C14 15.5 12 13.5 11 11"/>
+            <path class="arm-give" d="M17 18.5C20.5 18.5 23 19.5 25 21"/>
+            <path class="leg-a" d="M17.5 25C14 26 11.5 27.5 11 29.5"/>
+            <path class="leg-b" d="M17.5 25C15 28 12.5 30 11 31"/>
+          </svg>
+        </div>
+
         <div class="sdoc sdoc-1"><span class="sdoc-tag">Анализы</span></div>
         <div class="sdoc sdoc-2"><span class="sdoc-tag">Заключения</span></div>
         <div class="sdoc sdoc-3"><span class="sdoc-tag">Выписки</span></div>
@@ -40,8 +55,16 @@
         </div>
       </div>
 
-      <p class="splash-status" id="splash-status">Собираем таймлайн из ваших документов</p>
-      <button class="btn btn-ghost" id="splash-skip" type="button">Пропустить</button>
+      <!-- из принятых документов тут же собирается таймлайн -->
+      <div class="splash-tl" aria-hidden="true">
+        <span class="stl-line"></span>
+        <span class="stl-dot stl-1"></span>
+        <span class="stl-dot stl-2"></span>
+        <span class="stl-dot stl-3"></span>
+        <span class="stl-cap">Таймлайн собирается сам</span>
+      </div>
+
+      <p class="splash-status" id="splash-status">Собираем историю из ваших документов</p>
     </div>
   </section>
 

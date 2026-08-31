@@ -316,8 +316,10 @@
     $('#has-docs-block').hidden = myDocs().length === 0;
     var note = $('#mode-note');
     if (apiKey()) {
-      note.innerHTML = 'Распознавание начнётся сразу после выбора файлов. Модель ' + esc(model()) + '.';
+      note.innerHTML = '';
+      note.hidden = true;
     } else {
+      note.hidden = false;
       note.innerHTML = 'Ключ OpenAI не добавлен — распознать документы не получится.<br>' +
         '<button class="aslink" type="button" data-go="settings">Добавить ключ или включить демо</button>';
     }
@@ -1848,7 +1850,6 @@
     }, wait);
   }
 
-  $('#splash-skip').addEventListener('click', leaveSplash);
   document.querySelector('[data-screen="splash"]').addEventListener('click', leaveSplash);
 
   Promise.all([DB.all(), DB.getMeta('profiles'), DB.getMeta('currentId'), Auth.load()])
