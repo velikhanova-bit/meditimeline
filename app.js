@@ -148,12 +148,12 @@
   }
 
   var toastTimer = null;
-  function toast(msg) {
+  function toast(msg, ms) {
     var t = $('#toast');
     t.textContent = msg;
     t.classList.add('is-open');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.remove('is-open'); }, 2400);
+    toastTimer = setTimeout(function () { t.classList.remove('is-open'); }, ms || 2400);
   }
 
   // ─── профили ───────────────────────────────────────────────────────
@@ -460,7 +460,7 @@
     cta.disabled = true;
     cta.textContent = 'Смотреть историю';
 
-    var done = 0, failed = 0, foreign = [], firstPatient = null;
+    var done = 0, failed = 0, rejected = [], foreign = [], firstPatient = null;
     state.signupDocs = [];
     // Снимок серий ДО загрузки: после неё сравним и скажем, у каких
     // показателей появилась динамика. Иначе человек не узнает, что новый
@@ -475,7 +475,18 @@
         var row = document.querySelector('[data-row="' + i + '"]');
         if (row) row.querySelector('[data-note]').textContent = 'читаем…';
         return extractor(p.file).then(function (r) {
-          if (!r.isMedical) throw new Error('Это не похоже на медицинский документ');
+          // Не медицинский документ — не ошибка разбора, а осознанный отказ:
+          // файл не сохраняем и говорим об этом прямо, чтобы человек не
+          // искал его потом на таймлайне.
+          if (!r.isMedical) {
+            rejected.push(p.file.name);
+            if (row) {
+              row.querySelector('[data-note]').textContent = 'не медицинский документ — не загружен';
+              row.querySelector('.fstatus').innerHTML = '<span class="skip">пропущен</span>';
+            }
+            toast('«' + p.file.name + '» не похож на медицинский документ. Он не загружен.', 4200);
+            return;
+          }
 
           var doc = {
             id: DB.uid(),
@@ -536,10 +547,31 @@
     chain.then(function () {
       state.busy = false;
       cta.disabled = false;
-      $('#proc-hint').textContent = failed
-        ? 'Готово: ' + done + ' из ' + plan.length + '. Файлы со сбоем можно загрузить заново.'
-        : 'Готово: ' + done + ' ' + plain(done);
+
+      var parts = [];
+      if (done) parts.push('принято ' + done + ' ' + plain(done));
+      if (rejected.length) {
+        parts.push(rejected.length + ' ' +
+          plural(rejected.length, 'не медицинский', 'не медицинских', 'не медицинских') + ' — ' +
+          plural(rejected.length, 'пропущен', 'пропущены', 'пропущены'));
+      }
+      if (failed) parts.push(failed + ' со сбоем, можно загрузить заново');
+      $('#proc-hint').textContent = parts.length
+        ? parts.join(' · ')
+        : 'Ничего не принято';
       renderUpload();
+
+      // Принимать нечего — незачем вести на пустую историю
+      if (!done) {
+        cta.textContent = 'Выбрать другие файлы';
+        cta.onclick = function () { go('upload'); };
+        if (rejected.length && !failed) {
+          toast(rejected.length === 1
+            ? 'Это не медицинский документ. Загрузите анализ, заключение или выписку.'
+            : 'Ни один файл не похож на медицинский документ.', 4200);
+        }
+        return;
+      }
 
       if (!current() && state.signupDocs.length) {
         state.signupDraft = firstPatient || { name: '', birthDate: '', sex: 'unknown' };

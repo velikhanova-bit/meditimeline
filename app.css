@@ -930,3 +930,7 @@ body.select-mode .assign-bar { display: flex; }
   margin-top: var(--space-3);
   font-size: 11px; color: var(--muted-fg);
 }
+
+/* Пропущенный файл — не ошибка, поэтому не красный: человек ничего
+   не чинил, приложение просто не взяло документ. */
+.skip { color: var(--muted-fg); font-size: var(--text-xs); font-weight: 600; }
