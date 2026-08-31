@@ -1191,7 +1191,11 @@
   function indRow(ind) {
     var pts = series(ind.name);
     var isText = numOf(ind.value) === null;
-    return '<div class="ind" data-ind="' + ind.id + '">' +
+    // Текстовое заключение объяснять нечего — там уже слова врача
+    var askable = !isText;
+    return '<div class="ind' + (askable ? ' is-askable' : '') + '" data-ind="' + ind.id + '"' +
+      (askable ? ' data-ask="' + ind.id + '" role="button" tabindex="0"' +
+                 ' aria-label="Что значит показатель ' + esc(ind.name) + '"' : '') + '>' +
       '<div class="ind-main">' +
         '<div class="ind-name">' + esc(ind.name) + '</div>' +
         (ind.norm ? '<div class="ind-norm">норма ' + esc(ind.norm) + ' ' + esc(ind.unit) + '</div>' : '') +
@@ -1205,6 +1209,24 @@
             I.history + ' Динамика · ' + pts.length + '</button>' : '') +
         '</div>') +
       '<button class="ind-edit" type="button" data-edit="' + ind.id + '" aria-label="Редактировать">' + I.pencil + '</button>' +
+      (askable ? '<div class="ind-tip" data-tip="' + ind.id + '">' + tipHtml(ind) + '</div>' : '') +
+    '</div>';
+  }
+
+  // Подсказка живёт прямо в показателе: один раз запрошенная, она остаётся
+  // в документе и больше не стоит денег.
+  function tipHtml(ind) {
+    if (!ind.tip) return '';
+    var t = ind.tip;
+    var mark = t.status === 'out' ? 'out' : (t.status === 'near' ? 'near' : (t.status === 'ok' ? 'ok' : 'unknown'));
+    return '<div class="tip-card is-' + mark + '">' +
+      '<p class="tip-line"><b>Что это.</b> ' + esc(t.what) + '</p>' +
+      '<p class="tip-line"><b>На что влияет.</b> ' + esc(t.affects) + '</p>' +
+      '<p class="tip-line"><b>У вас.</b> ' + esc(t.yours) + '</p>' +
+      (t.seeDoctor
+        ? '<p class="tip-doctor">' + esc(t.advice) + '</p>'
+        : '<p class="tip-line">' + esc(t.advice) + '</p>') +
+      '<p class="tip-foot">Это объяснение, а не диагноз. Выводы делает врач.</p>' +
     '</div>';
   }
 
@@ -1276,6 +1298,13 @@
     var t = e.target;
     var edit = t.closest('[data-edit]');
     if (edit) return renderSheet(edit.dataset.edit);
+
+    // Тап по самому показателю — просьба объяснить. Карандаш и «Динамика»
+    // забирают клик раньше, поэтому их проверяем до этой ветки.
+    var ask = t.closest('[data-ask]');
+    if (ask && !t.closest('[data-hist]') && !t.closest('.ind-tip')) {
+      return askExplain(ask.dataset.ask);
+    }
     if (t.closest('[data-cancel]')) return renderSheet(null);
     var save = t.closest('[data-save]');
     if (save) return saveIndicator(save.dataset.save);
@@ -1290,6 +1319,53 @@
     if (t.closest('[data-del-yes]')) return doDelete();
     if (t.closest('[data-del-no]')) { $('#del-zone').innerHTML = ''; return; }
   });
+
+  function askExplain(indId) {
+    var doc = state.docs.filter(function (d) { return d.id === openDocId; })[0];
+    if (!doc) return;
+    var ind = (doc.indicators || []).filter(function (i) { return i.id === indId; })[0];
+    if (!ind) return;
+
+    var slot = document.querySelector('[data-tip="' + indId + '"]');
+    if (!slot) return;
+
+    // Второй тап сворачивает уже показанную подсказку
+    if (ind.tip && slot.innerHTML.trim()) { slot.innerHTML = ''; return; }
+    if (ind.tip) { slot.innerHTML = tipHtml(ind); return; }
+
+    var key = apiKey();
+    if (!key) {
+      slot.innerHTML = '<div class="tip-card is-unknown"><p class="tip-line">' +
+        'Чтобы получить объяснение, нужен ключ OpenAI — тот же, что и для распознавания. ' +
+        '<button class="aslink" type="button" data-go="settings">Добавить ключ</button></p></div>';
+      return;
+    }
+
+    slot.innerHTML = '<div class="tip-card is-loading"><span class="spinner"></span>' +
+      '<span>Объясняем показатель…</span></div>';
+
+    var p = current();
+    var person = {
+      sex: p ? p.sex : 'unknown',
+      age: p && p.birth && isDate(doc.date) ? yearsText(p.birth, doc.date) : ''
+    };
+
+    Extract.explain(ind, person, key, model())
+      .then(function (tip) {
+        ind.tip = tip;
+        return DB.put(doc).then(function () {
+          var live = document.querySelector('[data-tip="' + indId + '"]');
+          if (live) live.innerHTML = tipHtml(ind);
+        });
+      })
+      .catch(function (err) {
+        var live = document.querySelector('[data-tip="' + indId + '"]');
+        if (live) {
+          live.innerHTML = '<div class="tip-card is-out"><p class="tip-line">' +
+            esc(err.message || 'Не получилось объяснить') + '</p></div>';
+        }
+      });
+  }
 
   function saveIndicator(indId) {
     var doc = state.docs.filter(function (d) { return d.id === openDocId; })[0];

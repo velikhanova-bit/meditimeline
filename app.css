@@ -287,7 +287,7 @@ body { display: flex; justify-content: center; }
 
 /* ─── показатели и редактирование ──────────────────────────────────── */
 .ind {
-  display: flex; align-items: flex-start; gap: var(--space-3);
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-3);
   padding: var(--space-3) 0; border-top: 1px solid var(--border);
 }
 .ind:first-child { border-top: none; }
@@ -731,15 +731,21 @@ body.select-mode .assign-bar { display: flex; }
   position: absolute; left: 16px; top: 50%;
   width: 54px; height: 72px; margin-top: -36px;
   color: var(--primary);
-  animation: splash-hang 3s ease-in-out infinite;
+  animation: splash-descend 1.1s ease-out both,
+             splash-hang 3s ease-in-out 1.1s infinite;
 }
 .splash-hero svg { width: 100%; height: 100%; display: block; overflow: visible; }
 /* рука подаёт документ в такт вылету */
 .splash-hero .arm-give {
   transform-origin: 17px 18.5px;
-  animation: splash-give 2.1s ease-in-out infinite;
+  animation: splash-give 2.1s ease-in-out 1.1s infinite;
 }
 
+@keyframes splash-descend {
+  0%   { transform: translateY(-84px) rotate(2deg); }
+  70%  { transform: translateY(6px) rotate(-1deg); }
+  100% { transform: translateY(0) rotate(0deg); }
+}
 @keyframes splash-hang {
   0%, 100% { transform: translateY(0) rotate(0deg); }
   50%      { transform: translateY(-3px) rotate(-1.5deg); }
@@ -760,7 +766,7 @@ body.select-mode .assign-bar { display: flex; }
   background: var(--card);
   color: var(--muted-fg);
   font-size: 11px; font-weight: 600;
-  animation: splash-catch 2.1s ease-in-out infinite;
+  animation: splash-catch 2.1s ease-in-out 1.1s infinite;
 }
 .splash-drop svg { width: 26px; height: 26px; color: var(--primary); }
 
@@ -775,7 +781,7 @@ body.select-mode .assign-bar { display: flex; }
   display: flex; align-items: flex-end; justify-content: center;
   padding-bottom: 9px;
   opacity: 0; z-index: 3;
-  animation: splash-fly 2.1s ease-in-out infinite both;
+  animation: splash-fly 2.1s ease-in-out 1.1s infinite both;
 }
 /* строчки «текста», чтобы лист читался документом, а не плашкой */
 .sdoc::before {
@@ -785,9 +791,9 @@ body.select-mode .assign-bar { display: flex; }
 }
 .sdoc-tag { font-size: 11px; font-weight: 700; color: var(--primary); }
 
-.sdoc-2 { animation-delay: 0.7s; }
+.sdoc-2 { animation-delay: 1.8s; }
 .sdoc-2 .sdoc-tag { color: var(--accent); }
-.sdoc-3 { animation-delay: 1.4s; }
+.sdoc-3 { animation-delay: 2.5s; }
 
 @keyframes splash-fly {
   0%   { opacity: 0; transform: translate(-16px, 12px) rotate(-13deg) scale(0.78); }
@@ -817,11 +823,11 @@ body.select-mode .assign-bar { display: flex; }
   border-radius: 999px;
   background: var(--card);
   border: 2px solid var(--border);
-  animation: splash-mark 2.1s ease-in-out infinite;
+  animation: splash-mark 2.1s ease-in-out 1.1s infinite;
 }
 .stl-1 { left: 25%; }
-.stl-2 { left: 50%; animation-delay: 0.7s; }
-.stl-3 { left: 75%; animation-delay: 1.4s; }
+.stl-2 { left: 50%; animation-delay: 1.8s; }
+.stl-3 { left: 75%; animation-delay: 2.5s; }
 @keyframes splash-mark {
   0%, 30%  { background: var(--card); border-color: var(--border); transform: scale(1); }
   40%      { background: var(--primary); border-color: var(--primary); transform: scale(1.35); }
@@ -863,9 +869,64 @@ body.select-mode .assign-bar { display: flex; }
 /* Кому анимации мешают — показываем готовый кадр без движения */
 @media (prefers-reduced-motion: reduce) {
   .sdoc, .splash-drop, .splash-hero, .splash-hero .arm-give, .stl-dot, .sfeat { animation: none; }
+  .splash-hero { transform: none; }
   .sfeat-1 { opacity: 1; }
   .sdoc-1 { opacity: 1; transform: translate(20px, -34px) rotate(-7deg) scale(0.78); }
   .sdoc-2 { opacity: 1; transform: translate(28px, 6px) rotate(5deg) scale(0.78); }
   .sdoc-3 { opacity: 0; }
   .stl-dot { background: var(--primary); border-color: var(--primary); }
+}
+
+/* ─── подсказка по показателю ─────────────────────────────────────────
+   Строка показателя кликабельна целиком; карандаш и «Динамика» забирают
+   клик раньше. Ответ модели сохраняется в документ, поэтому повторный
+   тап ничего не стоит. */
+.ind.is-askable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.ind.is-askable:hover .ind-name { color: var(--primary); }
+.ind.is-askable .ind-name::after {
+  content: '?';
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-left: 6px;
+  vertical-align: 1px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted-fg);
+  font-size: 10px; font-weight: 700;
+}
+.ind.is-askable:hover .ind-name::after { border-color: var(--primary); color: var(--primary); }
+
+.ind-tip { flex-basis: 100%; }
+.ind-tip:empty { display: none; }
+.tip-card {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-left: 3px solid var(--muted-fg);
+}
+.tip-card.is-ok      { border-left-color: var(--ok); }
+.tip-card.is-near    { border-left-color: var(--accent); }
+.tip-card.is-out     { border-left-color: var(--danger); }
+.tip-card.is-unknown { border-left-color: var(--muted-fg); }
+.tip-card.is-loading {
+  display: flex; align-items: center; gap: var(--space-3);
+  font-size: var(--text-sm); color: var(--muted-fg);
+}
+
+.tip-line { font-size: var(--text-sm); line-height: 1.5; }
+.tip-line + .tip-line { margin-top: var(--space-2); }
+.tip-line b { font-weight: 700; }
+
+.tip-doctor {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--danger);
+  font-size: var(--text-sm); font-weight: 600; line-height: 1.45;
+}
+.tip-foot {
+  margin-top: var(--space-3);
+  font-size: 11px; color: var(--muted-fg);
 }

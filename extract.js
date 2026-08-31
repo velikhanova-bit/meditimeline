@@ -189,7 +189,7 @@
         return res.text().then(function (t) {
           var msg = t;
           try { msg = JSON.parse(t).error.message; } catch (e) { /* оставляем сырой текст */ }
-          throw new Error(explain(res.status, msg));
+          throw new Error(explainErr(res.status, msg));
         });
       }
       return res.json();
@@ -214,7 +214,7 @@
     });
   }
 
-  function explain(status, msg) {
+  function explainErr(status, msg) {
     if (status === 401) return 'Ключ не подошёл. Проверьте его в настройках.';
     if (status === 403) return 'Ключу не разрешена эта модель. Выберите другую в настройках.';
     if (status === 404) return 'Модель недоступна этому ключу. Выберите другую в настройках.';
@@ -223,6 +223,98 @@
     if (status === 413) return 'Файл слишком большой.';
     if (status >= 500) return 'Сервис OpenAI временно недоступен.';
     return msg || ('Ошибка ' + status);
+  }
+
+
+  // ─── подсказка по показателю ───────────────────────────────────────
+  // Что это, на что влияет и в норме ли конкретно у этого человека.
+  // Отдельный короткий запрос: он в разы дешевле разбора документа,
+  // и делается только когда человек сам нажал на показатель.
+  var EXPLAIN_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['what', 'affects', 'yours', 'status', 'seeDoctor', 'advice'],
+    properties: {
+      what: {
+        type: 'string',
+        description: 'Что это за показатель — двумя простыми предложениями, как объяснили бы человеку без медицинского образования. Без латыни и без терминов, которые сами требуют объяснения.'
+      },
+      affects: {
+        type: 'string',
+        description: 'На что в самочувствии и работе организма это влияет. Одно-два предложения, конкретно и без запугивания.'
+      },
+      yours: {
+        type: 'string',
+        description: 'В норме ли значение именно у этого человека. Начни с прямого ответа: «Ваше значение в норме» или «Ваше значение ниже нормы». Затем поясни, насколько далеко от границы. Если референсный интервал не указан, честно скажи, что сравнить не с чем.'
+      },
+      status: {
+        type: 'string',
+        enum: ['ok', 'near', 'out', 'unknown'],
+        description: 'ok — уверенно внутри интервала; near — внутри, но ближе десятой доли ширины интервала к границе; out — за границей; unknown — интервал не указан.'
+      },
+      seeDoctor: {
+        type: 'boolean',
+        description: 'true, если status равен out, near или unknown.'
+      },
+      advice: {
+        type: 'string',
+        description: 'Что сделать дальше, одно предложение. При out или near — прямо посоветовать показать результат врачу и не делать выводов самостоятельно. При ok — что достаточно planового наблюдения.'
+      }
+    }
+  };
+
+  var EXPLAIN_PROMPT = [
+    'Ты объясняешь человеку без медицинского образования, что означает показатель в его анализе.',
+    '',
+    'Правила:',
+    '— Простым языком, на «вы», короткими предложениями. Никакой латыни и аббревиатур без расшифровки.',
+    '— Не ставь диагноз и не назначай лечение. Ты объясняешь цифру, а не лечишь.',
+    '— Судить о норме можно только по референсному интервалу из документа. Если его нет — так и скажи.',
+    '— Если значение вышло за интервал или подошло к его границе ближе десятой доли ширины — посоветуй показать результат врачу.',
+    '— Не пугай. Отклонение показателя само по себе не диагноз, и об этом стоит сказать прямо.',
+    '— Не придумывай причин отклонения: их может быть много, и определяет их врач.'
+  ].join('\n');
+
+  function explain(ind, person, key, model) {
+    var who = [];
+    if (person && person.age) who.push('возраст ' + person.age);
+    if (person && person.sex === 'female') who.push('пол женский');
+    if (person && person.sex === 'male') who.push('пол мужской');
+
+    var text = 'Показатель: ' + ind.name +
+      '\nЗначение: ' + ind.value + (ind.unit ? ' ' + ind.unit : '') +
+      '\nРеференсный интервал: ' + (ind.norm ? ind.norm + (ind.unit ? ' ' + ind.unit : '') : 'в документе не указан') +
+      (who.length ? '\nПациент: ' + who.join(', ') : '');
+
+    return fetch(API, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + key },
+      body: JSON.stringify({
+        model: model || DEFAULT_MODEL,
+        instructions: EXPLAIN_PROMPT,
+        max_output_tokens: 2000,
+        reasoning: { effort: 'low' },
+        input: [{ role: 'user', content: [{ type: 'input_text', text: text }] }],
+        text: { format: { type: 'json_schema', name: 'explanation', strict: true, schema: EXPLAIN_SCHEMA } }
+      })
+    }).then(function (res) {
+      if (!res.ok) {
+        return res.text().then(function (t) {
+          var msg = t;
+          try { msg = JSON.parse(t).error.message; } catch (e) { /* сырой текст */ }
+          throw new Error(explainErr(res.status, msg));
+        });
+      }
+      return res.json();
+    }).then(function (data) {
+      if (data.status === 'incomplete') throw new Error('Ответ пришёл неполным');
+      var msg = (data.output || []).filter(function (o) { return o.type === 'message'; })[0];
+      if (!msg || !msg.content || !msg.content.length) throw new Error('Пустой ответ модели');
+      var part = msg.content[0];
+      if (part.type === 'refusal') throw new Error('Модель отказалась объяснять этот показатель');
+      if (part.type !== 'output_text' || !part.text) throw new Error('Неожиданный формат ответа');
+      return JSON.parse(part.text);
+    });
   }
 
   // ─── демо-режим ────────────────────────────────────────────────────
@@ -310,6 +402,7 @@
 
   global.Extract = {
     withAI: withAI,
+    explain: explain,
     demo: demo,
     resetDemo: resetDemo,
     MODELS: MODELS,

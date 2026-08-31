@@ -7,7 +7,7 @@
  * Network-first отдаёт кэш только когда сети реально нет.
  */
 
-const CACHE = 'medtimeline-v5';
+const CACHE = 'medtimeline-v6';
 const SHELL = [
   './', './index.html',
   './app.js', './db.js', './auth.js', './extract.js',
