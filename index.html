@@ -74,6 +74,25 @@
     </div>
   </section>
 
+  <!-- ═══ ПРИВЕТСТВИЕ ══════════════════════════════════════════════ -->
+  <section class="screen" data-screen="welcome">
+    <div class="topbar"><h1 class="solo">Начнём</h1></div>
+    <div class="screen-body stack-lg">
+      <div class="stack">
+        <h2>Здесь пока пусто</h2>
+        <p class="muted">Похоже, вы открыли приложение в этом браузере впервые.</p>
+      </div>
+
+      <button class="btn" data-go="upload">Загрузить первые документы</button>
+
+      <div class="card stack-sm">
+        <div class="section-label">Уже есть история</div>
+        <p class="muted" style="font-size:var(--text-sm)">История здоровья хранится в том браузере, где вы её собрали, и на сервер не уходит. Поэтому на новом устройстве её нет — откройте приложение там, где загружали документы.</p>
+        <button class="btn btn-ghost" data-go="login">Войти в этом браузере</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ═══ ВХОД ═════════════════════════════════════════════════════ -->
   <section class="screen" data-screen="login">
     <div class="topbar"><h1 class="solo">Вход</h1></div>
@@ -185,6 +204,7 @@
     </div>
 
     <div class="bottom-row">
+      <button class="btn btn-ghost" data-go="review">Что у меня с…</button>
       <button class="btn" data-go="upload">Добавить документы</button>
     </div>
   </section>
@@ -342,6 +362,15 @@
       <button class="btn" id="paid-open">Открыть новую историю</button>
       <button class="btn btn-ghost" id="paid-back">Вернуться к своей</button>
     </div>
+  </section>
+
+  <!-- ═══ РАЗБОР ПО СИСТЕМЕ ════════════════════════════════════════ -->
+  <section class="screen" data-screen="review">
+    <div class="topbar">
+      <button class="iconbtn" id="rv-back" aria-label="Назад"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <h1 id="rv-title">Что у меня с…</h1>
+    </div>
+    <div class="screen-body stack-lg" id="rv-body"></div>
   </section>
 
   <!-- ═══ ДИНАМИКА ═════════════════════════════════════════════════ -->

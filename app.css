@@ -194,56 +194,52 @@ body { display: flex; justify-content: center; }
 /* ─── таймлайн ─────────────────────────────────────────────────────── */
 .timeline-frame { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0 var(--space-4); }
 .tl-scroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-.tl-flow { position: relative; }
+.tl-flow { position: relative; --tl-inset: 46px; }
 
-.mk { position: relative; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
-.mk::before { content: ''; position: absolute; left: 28px; top: 0; bottom: 0; width: 2px; background: var(--border); }
-.mk.is-now::before { top: 50%; }
-.mk.is-birth::before { bottom: 50%; }
-.mk-dot {
-  position: relative; z-index: 1; flex: none;
-  width: 12px; height: 12px; margin-left: 23px;
-  border-radius: 999px; background: var(--bg); border: 2px solid var(--muted-fg);
-}
-.mk.is-now .mk-dot { background: var(--fg); border-color: var(--fg); }
+/* Своей линии у ленты больше нет: роль шкалы играет канат, по которому
+   лезет человечек. Поэтому ни вертикальной черты, ни точек — только
+   отступ слева, чтобы канат шёл рядом с содержимым. */
+.mk { padding: var(--space-2) 0 var(--space-2) var(--tl-inset); }
 .mk-text strong { display: block; font-family: var(--font-heading); font-size: var(--text-base); font-weight: 700; line-height: 1.2; }
 .mk-text span { font-size: var(--text-xs); color: var(--muted-fg); }
 
-.ev { position: relative; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
-.ev::before { content: ''; position: absolute; left: 28px; top: 0; bottom: 0; width: 2px; background: var(--border); }
-.ev-dot {
-  position: relative; z-index: 1; flex: none;
-  width: 14px; height: 14px; margin-left: 22px;
-  border-radius: 999px; background: var(--primary);
-  border: 3px solid var(--bg); box-shadow: 0 0 0 2px var(--primary);
+/* Группа одной даты: дата принадлежит шкале, карточки висят под ней */
+.ev { padding: var(--space-2) 0 var(--space-2) var(--tl-inset); }
+.ev-date {
+  font-family: var(--font-heading);
+  font-size: var(--text-base); font-weight: 700;
+  line-height: 1.2; letter-spacing: -0.01em;
+  margin-bottom: var(--space-2);
 }
 .ev-card {
-  flex: 1; min-width: 0; text-align: left;
+  display: flex; align-items: center; gap: var(--space-3);
+  width: 100%; text-align: left;
   background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: var(--space-3);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
   cursor: pointer; box-shadow: var(--shadow-sm);
   font-family: var(--font-body);
   transition: transform var(--dur) var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
+.ev-card + .ev-card { margin-top: var(--space-2); }
 .ev-card:active { transform: scale(0.985); }
-.ev-card .tdate { display: block; font-weight: 700; font-size: var(--text-sm); }
-.ev-card .ttitle { display: block; font-size: var(--text-xs); color: var(--muted-fg); margin-bottom: 6px; }
-.ev-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.ev-card .ttitle {
+  flex: 1; min-width: 0;
+  font-size: var(--text-sm); font-weight: 600; color: var(--fg);
+}
+/* Теги систем прижаты к правому краю карточки */
+.ev-badges { flex: none; display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 52%; }
 
 .gap { position: relative; display: flex; align-items: center; }
-.gap::before {
-  content: ''; position: absolute; left: 28px; top: 0; bottom: 0; width: 2px;
-  background: repeating-linear-gradient(to bottom, var(--border) 0 4px, transparent 4px 11px);
-}
-.gap-label { margin-left: 52px; font-size: 11px; color: var(--muted-fg); background: var(--bg); padding: 2px 0; }
+.gap-label { margin-left: var(--tl-inset); font-size: 11px; color: var(--muted-fg); background: var(--bg); padding: 2px 0; }
 .gap.is-cut::before { background: repeating-linear-gradient(to bottom, var(--border) 0 3px, transparent 3px 9px); }
 /* Ровно то же место, что у обычной подписи промежутка. Раньше здесь была
    пилюля с рамкой: она наезжала на линию, а после сдвига вправо её текст
    из-за padding начинался на 11 px правее соседей — колонка разъезжалась.
    Линию и так рвёт пунктир, рамка ничего не добавляла. */
 .cut-badge {
-  margin-left: 52px;
+  margin-left: var(--tl-inset);
   font-size: 11px; font-weight: 700; color: var(--muted-fg);
   background: var(--bg); padding: 2px 0;
 }
@@ -592,8 +588,8 @@ body.select-mode .assign-bar { display: flex; }
    var(--space-4) рамки, а канат на 15px — между краем экрана и лентой. */
 .tl-rope {
   position: absolute;
-  left: calc(var(--space-4) - 1px);
-  width: 3px;
+  left: 16px;                /* колонка каната: содержимое ленты начинается с --tl-inset */
+  width: 4px;
   border-radius: 2px;
   opacity: 0; pointer-events: none;
   transition: opacity var(--dur) var(--ease);
@@ -611,9 +607,9 @@ body.select-mode .assign-bar { display: flex; }
 
 .tl-runner {
   position: absolute;
-  left: calc(var(--space-4) - 11px);   /* канат приходится на x=11 вьюбокса */
+  left: 3px;                 /* канат приходится на x=11 вьюбокса шириной 40 */
   top: 0;
-  width: 30px; height: 32px;
+  width: 40px; height: 43px;
   color: var(--primary);
   opacity: 0; pointer-events: none;
   transition: opacity var(--dur) var(--ease);
@@ -934,3 +930,35 @@ body.select-mode .assign-bar { display: flex; }
 /* Пропущенный файл — не ошибка, поэтому не красный: человек ничего
    не чинил, приложение просто не взяло документ. */
 .skip { color: var(--muted-fg); font-size: var(--text-xs); font-weight: 600; }
+
+/* ─── разбор по системе ───────────────────────────────────────────────
+   «А что у меня со щитовидной?» — картина за всю историю: что менялось,
+   что стоит внимания врача и почему это важно, объяснённое цепочкой
+   следствий, а не медицинским языком. */
+.rv-pick {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  width: 100%; min-height: var(--tap);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--fg);
+  font-family: var(--font-body); text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.rv-pick:hover { border-color: var(--primary); }
+.rv-pick-name { font-size: var(--text-sm); font-weight: 600; }
+.rv-pick-n { flex: none; font-size: var(--text-xs); color: var(--muted-fg); }
+
+.rv-text { font-size: var(--text-sm); line-height: 1.55; }
+.rv-next { margin-top: var(--space-2); font-size: var(--text-sm); font-weight: 600; }
+.rv-who { font-size: var(--text-sm); font-weight: 700; color: var(--primary); }
+
+.rv-step { display: flex; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.rv-step:first-of-type { border-top: none; }
+.rv-when { flex: none; width: 5.5rem; font-size: var(--text-xs); font-weight: 700; color: var(--muted-fg); }
+.rv-what { flex: 1; min-width: 0; font-size: var(--text-sm); line-height: 1.5; }
+
+.rv-list { margin: 0; padding-left: var(--space-5); font-size: var(--text-sm); line-height: 1.55; }
+.rv-list li + li { margin-top: var(--space-2); }
+
+/* Повод к врачу выделяем рамкой, а не паникой */
+.card.rv-doctor { border-left: 3px solid var(--danger); }

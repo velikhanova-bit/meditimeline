@@ -30,6 +30,10 @@
     tipsOpen: {},        // id показателей, у которых карточка развёрнута
     tipsBusy: {},        // id показателей, по которым идёт запрос
     tipsErr: {},         // id -> текст ошибки последнего запроса
+    reviews: {},         // система -> {fingerprint, data}
+    rvSystem: null,      // какая система открыта
+    rvBusy: false,
+    rvErr: '',
     foreign: null        // {patient, docs} — чужие документы, ждут оплаты
   };
 
@@ -248,6 +252,7 @@
     document.body.classList.remove('select-mode');
     if (name === 'timeline') { renderFilterUI(); renderTimeline(); renderProfileBtn(); }
     if (name === 'groups') renderGroups();
+    if (name === 'review') { state.rvSystem = null; state.rvErr = ''; renderReview(); }
     if (name === 'signup') renderSignup();
     if (name === 'login') renderLogin();
     if (name === 'profile') renderProfile();
@@ -884,8 +889,23 @@
            : '<span class="gap-label">' + spanText(a, b) + '</span>') + '</div>';
   }
   function marker(cls, dateLabel, sub) {
-    return '<div class="mk ' + cls + '"><span class="mk-dot"></span>' +
+    return '<div class="mk ' + cls + '">' +
       '<span class="mk-text"><strong>' + esc(dateLabel) + '</strong><span>' + esc(sub) + '</span></span></div>';
+  }
+
+  // Документы одной даты идут одной группой: дата принадлежит канату,
+  // карточки висят под ней. Иначе между двумя анализами того же дня
+  // появлялся промежуток «меньше месяца», которого на деле нет.
+  function groupByDate(docs) {
+    var out = [], last = null;
+    docs.forEach(function (d) {
+      if (!last || last.date !== d.date) {
+        last = { date: d.date, docs: [] };
+        out.push(last);
+      }
+      last.docs.push(d);
+    });
+    return out;
   }
 
   function renderTimeline() {
@@ -908,22 +928,27 @@
       return;
     }
 
+    var groups = groupByDate(docs);
+
     var html = marker('is-now', ruDate(today),
       bottom && bottom.label === 'Рождение' ? 'Сегодня · ' + yearsText(bottom.date, today) : 'Сегодня');
-    html += gapBlock(docs[0].date, today);
+    html += gapBlock(groups[0].date, today);
 
-    docs.forEach(function (d, i) {
-      html += '<div class="ev"><span class="ev-dot"></span>' +
-        '<button class="ev-card" data-doc="' + d.id + '">' +
-          '<span class="tdate">' + ruDate(d.date) + '</span>' +
-          '<span class="ttitle">' + esc(d.title) + (d.clinic ? ' · ' + esc(d.clinic) : '') + '</span>' +
-          '<span class="ev-badges">' + docSystems(d).map(badge).join('') + '</span>' +
-        '</button></div>';
-      var next = docs[i + 1];
-      if (next) html += gapBlock(next.date, d.date);
+    groups.forEach(function (g, i) {
+      html += '<div class="ev">' +
+        '<div class="ev-date">' + ruDate(g.date) + '</div>' +
+        g.docs.map(function (d) {
+          return '<button class="ev-card" data-doc="' + d.id + '">' +
+            '<span class="ttitle">' + esc(d.title) + '</span>' +
+            '<span class="ev-badges">' + docSystems(d).map(badge).join('') + '</span>' +
+          '</button>';
+        }).join('') +
+      '</div>';
+      var next = groups[i + 1];
+      if (next) html += gapBlock(next.date, g.date);
     });
 
-    var last = docs[docs.length - 1].date;
+    var last = groups[groups.length - 1].date;
     if (bottom && monthsBetween(bottom.date, last) > 0) {
       html += gapBlock(bottom.date, last);
       html += marker('is-birth', ruDate(bottom.date), bottom.label);
@@ -1569,6 +1594,160 @@
     return m ? [parseFloat(m[1]), parseFloat(m[2])] : null;
   }
 
+
+  // ─── разбор по системе организма ───────────────────────────────────
+  // Все числовые показатели системы за всю историю, отсортированные по дате.
+  function systemItems(system) {
+    var out = [];
+    myDocs().forEach(function (d) {
+      if (!isDate(d.date)) return;
+      (d.indicators || []).forEach(function (i) {
+        if (i.system !== system) return;
+        out.push({ date: d.date, name: i.name, value: i.value, unit: i.unit, norm: i.norm });
+      });
+    });
+    return out.sort(function (a, b) { return D(a.date) - D(b.date); });
+  }
+
+  // Отпечаток данных: если документы поменялись, старый разбор
+  // перестаёт быть верным и его надо запросить заново.
+  function systemPrint(items) {
+    return items.map(function (i) { return i.date + '|' + i.name + '|' + i.value; }).join(';');
+  }
+
+  function renderReview() {
+    var body = $('#rv-body');
+    var sys = state.rvSystem;
+
+    if (!sys) {
+      $('#rv-title').textContent = 'Что у меня с…';
+      var systems = allSystems();
+      body.innerHTML = systems.length
+        ? '<p class="muted">Выберите систему — соберём по ней всю вашу историю: что менялось, что стоит внимания врача и почему это важно.</p>' +
+          '<div class="stack-sm">' + systems.map(function (s) {
+            var n = systemItems(s.name).length;
+            return '<button class="rv-pick" type="button" data-system="' + esc(s.name) + '">' +
+              '<span class="rv-pick-name">' + esc(s.name) + '</span>' +
+              '<span class="rv-pick-n">' + n + ' ' +
+                plural(n, 'показатель', 'показателя', 'показателей') + '</span>' +
+            '</button>';
+          }).join('') + '</div>'
+        : '<p class="muted">Пока нет ни одной группы — загрузите документы.</p>';
+      return;
+    }
+
+    $('#rv-title').textContent = sys;
+    var items = systemItems(sys);
+
+    if (state.rvBusy) {
+      body.innerHTML = '<div class="card stack-sm" style="text-align:center">' +
+        '<span class="spinner" style="margin:0 auto"></span>' +
+        '<p class="muted">Собираем картину по ' + esc(items.length) + ' ' +
+        plural(items.length, 'показателю', 'показателям', 'показателям') + '…</p></div>';
+      return;
+    }
+    if (state.rvErr) {
+      body.innerHTML = '<div class="card stack-sm"><p class="error">' + esc(state.rvErr) + '</p>' +
+        '<button class="btn" type="button" id="rv-retry">Попробовать ещё раз</button></div>' +
+        '<button class="btn btn-ghost" type="button" id="rv-other">Выбрать другую систему</button>';
+      return;
+    }
+
+    var r = (state.reviews[sys] || {}).data;
+    if (!r) { body.innerHTML = ''; return; }
+
+    body.innerHTML =
+      '<div class="card stack-sm"><div class="section-label">Картина в целом</div>' +
+        '<p class="rv-text">' + esc(r.summary) + '</p></div>' +
+
+      (r.history && r.history.length
+        ? '<div class="card stack-sm"><div class="section-label">Как менялось</div>' +
+          r.history.map(function (h) {
+            return '<div class="rv-step"><span class="rv-when">' + esc(h.when) + '</span>' +
+              '<span class="rv-what">' + esc(h.what) + '</span></div>';
+          }).join('') + '</div>'
+        : '') +
+
+      (r.signals && r.signals.length
+        ? '<div class="card stack-sm"><div class="section-label">Что стоит внимания</div>' +
+          '<ul class="rv-list">' + r.signals.map(function (x) {
+            return '<li>' + esc(x) + '</li>';
+          }).join('') + '</ul></div>'
+        : '') +
+
+      '<div class="card stack-sm ' + (r.seeDoctor ? 'rv-doctor' : '') + '">' +
+        '<div class="section-label">' + (r.seeDoctor ? 'Почему стоит показаться врачу' : 'Почему пока можно не спешить') + '</div>' +
+        (r.seeDoctor && r.doctor ? '<p class="rv-who">К кому: ' + esc(r.doctor) + '</p>' : '') +
+        '<p class="rv-text">' + esc(r.why) + '</p>' +
+        '<p class="rv-next">' + esc(r.next) + '</p>' +
+      '</div>' +
+
+      '<p class="tip-foot">Это разбор ваших цифр, а не диагноз. Диагноз ставит врач.</p>' +
+      '<button class="btn btn-ghost" type="button" id="rv-other">Выбрать другую систему</button>';
+  }
+
+  function openReview(sys) {
+    state.rvSystem = sys;
+    state.rvErr = '';
+    var items = systemItems(sys);
+    var print = systemPrint(items);
+    var cached = state.reviews[sys];
+
+    if (cached && cached.print === print) { state.rvBusy = false; return renderReview(); }
+    if (!items.length) {
+      state.rvErr = 'По этой системе нет числовых показателей — разбирать нечего.';
+      return renderReview();
+    }
+
+    var key = apiKey();
+    if (!key) {
+      state.rvErr = 'Нужен ключ OpenAI — тот же, что и для распознавания. Добавьте его в настройках.';
+      return renderReview();
+    }
+
+    state.rvBusy = true;
+    renderReview();
+
+    var p = current();
+    var person = {
+      sex: p ? p.sex : 'unknown',
+      age: p && p.birth ? yearsText(p.birth, new Date()) : ''
+    };
+
+    Extract.review(sys, items, person, key, model())
+      .then(function (data) {
+        state.reviews[sys] = { print: print, data: data };
+        state.rvBusy = false;
+        if (state.rvSystem === sys) renderReview();
+        return DB.setMeta('reviews', state.reviews);
+      })
+      .catch(function (err) {
+        state.rvBusy = false;
+        state.rvErr = err.message || 'Не получилось собрать разбор';
+        if (state.rvSystem === sys) renderReview();
+      });
+  }
+
+  $('#rv-body').addEventListener('click', function (e) {
+    var pick = e.target.closest('[data-system]');
+    if (pick) return openReview(pick.dataset.system);
+    if (e.target.closest('#rv-other')) {
+      state.rvSystem = null; state.rvErr = '';
+      return renderReview();
+    }
+    if (e.target.closest('#rv-retry')) {
+      var sys = state.rvSystem;
+      delete state.reviews[sys];
+      state.rvErr = '';
+      return openReview(sys);
+    }
+  });
+
+  $('#rv-back').addEventListener('click', function () {
+    if (state.rvSystem) { state.rvSystem = null; state.rvErr = ''; return renderReview(); }
+    go('timeline');
+  });
+
   // ─── профиль ───────────────────────────────────────────────────────
   function profileRow(p, deletable) {
     var icon = p.sex === 'male' ? I.man : (p.sex === 'female' ? I.woman : I.person);
@@ -1967,7 +2146,12 @@
     // Чтение из IndexedDB асинхронное: если человек успел выбрать файлы
     // раньше, чем оно закончилось, нельзя выбрасывать его с экрана разбора.
     if (state.busy) return;
-    go(myDocs().length ? 'timeline' : 'upload');
+    if (myDocs().length) return go('timeline');
+    // Пустой браузер: сначала объясняем, где живёт история, и только
+    // потом ведём к загрузке. Иначе человек с готовым аккаунтом на другом
+    // устройстве упирается в пустое окно загрузки и не понимает, куда делось.
+    if (!Auth.exists() && !state.docs.length) return go('welcome');
+    go('upload');
   }
 
   // ─── экран запуска ─────────────────────────────────────────────────
@@ -1998,11 +2182,12 @@
 
   document.querySelector('[data-screen="splash"]').addEventListener('click', leaveSplash);
 
-  Promise.all([DB.all(), DB.getMeta('profiles'), DB.getMeta('currentId'), Auth.load()])
+  Promise.all([DB.all(), DB.getMeta('profiles'), DB.getMeta('currentId'), Auth.load(), DB.getMeta('reviews')])
     .then(function (r) {
       state.docs = r[0] || [];
       state.profiles = r[1] || [];
       state.currentId = r[2] || (state.profiles[0] && state.profiles[0].id) || null;
+      state.reviews = r[4] || {};
 
       // Данные, записанные до появления профилей, остались бы без владельца.
       var orphans = state.docs.filter(function (d) { return !d.profileId; });

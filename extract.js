@@ -331,6 +331,118 @@
     });
   }
 
+
+  // ─── разбор по системе организма ───────────────────────────────────
+  // «А что у меня с щитовидной?» — связная картина за всю историю:
+  // что менялось, что настораживает, к какому врачу и ПОЧЕМУ это важно.
+  var REVIEW_SCHEMA = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['summary', 'history', 'signals', 'seeDoctor', 'doctor', 'why', 'next'],
+    properties: {
+      summary: {
+        type: 'string',
+        description: 'Общая картина по этой системе за всю историю, два-три предложения простым языком. Без диагнозов.'
+      },
+      history: {
+        type: 'array',
+        description: 'Как менялось со временем, по одной записи на дату или период. Пусто, если сравнивать нечего.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['when', 'what'],
+          properties: {
+            when: { type: 'string', description: 'Когда: «май 2019» или «2019–2024».' },
+            what: { type: 'string', description: 'Что было в этот момент, одним предложением с числами.' }
+          }
+        }
+      },
+      signals: {
+        type: 'array',
+        description: 'Что в этих данных стоит внимания врача. Пустой список, если всё в пределах нормы.',
+        items: { type: 'string' }
+      },
+      seeDoctor: { type: 'boolean', description: 'Есть ли повод показаться врачу.' },
+      doctor: {
+        type: 'string',
+        description: 'К какому специалисту идти: «терапевт», «эндокринолог», «гастроэнтеролог». Пустая строка, если повода нет.'
+      },
+      why: {
+        type: 'string',
+        description: 'ПОЧЕМУ к врачу стоит сходить — объясни цепочкой следствий, как в школе: этот показатель отвечает за то-то, при отклонении страдает то-то, а значит может пострадать и вот это. Три-четыре предложения, спокойно и по делу, без запугивания. Если повода нет — объясни, что именно выглядит благополучно и когда имеет смысл повторить анализы.'
+      },
+      next: { type: 'string', description: 'Одно конкретное действие на ближайшее время.' }
+    }
+  };
+
+  var REVIEW_PROMPT = [
+    'Ты объясняешь человеку без медицинского образования, что происходит с одной системой его организма по его же анализам за несколько лет.',
+    '',
+    'Правила:',
+    '— Простым языком, на «вы». Никакой латыни и аббревиатур без расшифровки.',
+    '— Не ставь диагноз и не назначай лечение. Ты собираешь картину и объясняешь, зачем идти к врачу.',
+    '— Опирайся только на переданные значения и референсные интервалы. Ничего не додумывай.',
+    '— Объясняя важность визита, разворачивай цепочку следствий: за что отвечает показатель, что происходит при отклонении, к чему это может привести. Так, чтобы стало понятно школьнику.',
+    '— Не пугай и не нагнетай. Отклонение — повод проверить, а не приговор.',
+    '— Если всё в норме, так и скажи и не выдумывай тревожных сигналов.'
+  ].join('\n');
+
+  function review(system, items, person, key, model) {
+    var lines = items.map(function (i) {
+      return '— ' + i.date + ': ' + i.name + ' = ' + i.value + (i.unit ? ' ' + i.unit : '') +
+        (i.norm ? ' (норма ' + i.norm + ')' : ' (норма не указана)');
+    }).join('\n');
+
+    var who = [];
+    if (person && person.age) who.push('возраст ' + person.age);
+    if (person && person.sex === 'female') who.push('пол женский');
+    if (person && person.sex === 'male') who.push('пол мужской');
+
+    var text = 'Система: ' + system +
+      (who.length ? '\nПациент: ' + who.join(', ') : '') +
+      '\n\nПоказатели за всю историю:\n' + lines;
+
+    var ctrl = global.AbortController ? new AbortController() : null;
+    var timer = ctrl && setTimeout(function () { ctrl.abort(); }, 60000);
+
+    return fetch(API, {
+      method: 'POST',
+      signal: ctrl ? ctrl.signal : undefined,
+      headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + key },
+      body: JSON.stringify({
+        model: model || DEFAULT_MODEL,
+        instructions: REVIEW_PROMPT,
+        max_output_tokens: 6000,
+        reasoning: { effort: 'low' },
+        input: [{ role: 'user', content: [{ type: 'input_text', text: text }] }],
+        text: { format: { type: 'json_schema', name: 'review', strict: true, schema: REVIEW_SCHEMA } }
+      })
+    }).catch(function (err) {
+      if (timer) clearTimeout(timer);
+      throw new Error(err && err.name === 'AbortError'
+        ? 'Ответ не пришёл за минуту — попробуйте ещё раз'
+        : 'Нет связи с OpenAI');
+    }).then(function (res) {
+      if (timer) clearTimeout(timer);
+      if (!res.ok) {
+        return res.text().then(function (t) {
+          var msg = t;
+          try { msg = JSON.parse(t).error.message; } catch (e) { /* сырой текст */ }
+          throw new Error(explainErr(res.status, msg));
+        });
+      }
+      return res.json();
+    }).then(function (data) {
+      if (data.status === 'incomplete') throw new Error('Ответ пришёл неполным');
+      var msg = (data.output || []).filter(function (o) { return o.type === 'message'; })[0];
+      if (!msg || !msg.content || !msg.content.length) throw new Error('Пустой ответ модели');
+      var part = msg.content[0];
+      if (part.type === 'refusal') throw new Error('Модель отказалась разбирать эту систему');
+      if (part.type !== 'output_text' || !part.text) throw new Error('Неожиданный формат ответа');
+      return JSON.parse(part.text);
+    });
+  }
+
   // ─── демо-режим ────────────────────────────────────────────────────
 
   var SAMPLES = [
@@ -417,6 +529,7 @@
   global.Extract = {
     withAI: withAI,
     explain: explain,
+    review: review,
     demo: demo,
     resetDemo: resetDemo,
     MODELS: MODELS,
